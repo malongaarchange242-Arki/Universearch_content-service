@@ -1,0 +1,23 @@
+{
+  "name": "content-service",
+  "version": "1.0.0",
+  "description": "Content management service for posts, comments, and interactions",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@supabase/supabase-js": "^2.38.4",
+    "@fastify/multipart": "^7.0.0",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.25.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

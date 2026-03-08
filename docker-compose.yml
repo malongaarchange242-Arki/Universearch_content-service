@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  content-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - LOG_LEVEL=info
+    depends_on:
+      - identity-service
+    networks:
+      - universearch
+
+networks:
+  universearch:
+    driver: bridge
