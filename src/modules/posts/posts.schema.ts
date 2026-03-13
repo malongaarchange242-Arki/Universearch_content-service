@@ -56,3 +56,14 @@ export const updatePostSchema = {
     }
   }
 };
+
+export const createCommentSchema = {
+  body: {
+    type: 'object',
+    required: ['contenu'],
+    properties: {
+      contenu: { type: 'string', minLength: 1, maxLength: 2000 },
+      parent_comment_id: { type: ['string', 'null'], description: 'ID du commentaire parent (pour les réponses)' }
+    }
+  }
+};

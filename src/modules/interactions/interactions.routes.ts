@@ -41,14 +41,4 @@ export const interactionsRoutes = async (
     },
     InteractionsController.commentPost as any
   );
-
-  /**
-   * GET /posts/:id/comments - Récupérer les commentaires
-   * Public avec pagination
-   */
-  app.get(
-    '/posts/:id/comments',
-    { schema: getCommentsSchema },
-    InteractionsController.getComments as any
-  );
 };

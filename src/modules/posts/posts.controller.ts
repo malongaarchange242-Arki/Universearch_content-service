@@ -229,6 +229,24 @@ export const listPosts = async (
     const supabase = (request.server as any).supabase;
     const user = (request.user as any) || null;
 
+    // Check for query parameters: entity_id, entity_type, limit
+    const query = request.query as any;
+    const entityId = query?.entity_id;
+    const entityType = query?.entity_type;
+    const limit = query?.limit ? parseInt(query.limit, 10) : 100;
+
+    // If entity_id and entity_type are provided, filter by entity
+    if (entityId && entityType) {
+      const posts = await PostsService.listPostsByEntity(
+        supabase,
+        entityId,
+        entityType === 'universite' ? 'universite' : 'centre',
+        limit
+      );
+      reply.send({ success: true, data: posts });
+      return;
+    }
+
     // Apply strict organisation-scoped filter:
     // - If user.role === 'universite' => filter author_type='universite' and author_id=user.id
     // - If user.role === 'centre_formation' => filter author_type='centre_formation' and author_id=user.id
@@ -245,7 +263,7 @@ export const listPosts = async (
       request.log.warn({ msg: 'Could not determine user role for post filtering', error: e });
     }
 
-    const posts = await PostsService.listPosts(supabase, 100, filter);
+    const posts = await PostsService.listPosts(supabase, limit, filter);
     reply.send({ success: true, data: posts });
   } catch (error) {
     request.log.error(error);
@@ -338,8 +356,8 @@ export const deletePost = async (
 };
 
 /**
- * Create a temporary signed URL for a storage object
- * Expects JSON body: { bucket: 'videos'|'images', path: 'posts/..file..' , expires?: number }
+ * Créer un commentaire sur un post
+ * POST /posts/:id/comments
  */
 export const createSignedUrl = async (
   request: FastifyRequest,
@@ -370,5 +388,86 @@ export const createSignedUrl = async (
   } catch (err) {
     request.log.error(err);
     return reply.status(500).send({ success: false, error: (err as Error).message });
+  }
+};
+
+// --- new handlers below ---
+
+export const createComment = async (
+  request: FastifyRequest<{ Params: { id: string }; Body: { contenu: string; parent_comment_id?: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const user = (request.user as any);
+    const supabase = (request.server as any).supabase;
+    const contenu = (request.body as any)?.contenu || '';
+    const parentCommentId = (request.body as any)?.parent_comment_id || null;
+
+    if (!contenu || typeof contenu !== 'string') {
+      return reply.status(400).send({ success: false, error: 'contenu is required' });
+    }
+
+    const comment = await PostsService.createComment(supabase, user.id, request.params.id, contenu, parentCommentId);
+    reply.status(201).send({ success: true, data: comment });
+  } catch (error) {
+    request.log.error(error);
+    reply.status(400).send({ success: false, error: (error as Error).message });
+  }
+};
+
+/**
+ * List comments for a post (public)
+ * GET /posts/:id/comments
+ */
+export const listComments = async (
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const supabase = (request.server as any).supabase;
+    const limit = Number((request.query as any)?.limit || 50);
+
+    const comments = await PostsService.listComments(supabase, request.params.id, limit);
+    reply.send({ success: true, data: comments });
+  } catch (error) {
+    request.log.error(error);
+    reply.status(500).send({ success: false, error: (error as Error).message });
+  }
+};
+
+/**
+ * Lister les posts par entité (université ou centre)
+ * Query params: entity_id, entity_type, limit
+ */
+export const listPostsByEntity = async (
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const supabase = (request.server as any).supabase;
+    const query = request.query as any;
+
+    const entityId = query?.entity_id;
+    const entityType = query?.entity_type;
+    const limit = query?.limit ? parseInt(query.limit, 10) : 10;
+
+    if (!entityId || !entityType) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Missing required query parameters: entity_id, entity_type',
+      });
+    }
+
+    const posts = await PostsService.listPostsByEntity(
+      supabase,
+      entityId,
+      entityType === 'universite' ? 'universite' : 'centre',
+      limit
+    );
+
+    reply.send({ success: true, data: posts });
+  } catch (error) {
+    request.log.error(error);
+    reply.status(500).send({ success: false, error: (error as Error).message });
   }
 };

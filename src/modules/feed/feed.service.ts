@@ -9,8 +9,7 @@ export interface FeedPost {
   contenu: string;
   media_url: string | null;
   media_type: string | null;
-  created_at: string;
-  updated_at: string;
+  date_creation: string;
   likes_count: number;
   comments_count: number;
 }
@@ -38,7 +37,7 @@ export const getFeed = async (
   const { data: posts, error: postsError, count } = await supabase
     .from('posts')
     .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
+    .order('date_creation', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (postsError || !posts) {
@@ -90,7 +89,7 @@ export const getUniversitesFeed = async (
     .from('posts')
     .select('*', { count: 'exact' })
     .eq('org_type', 'universite')
-    .order('created_at', { ascending: false })
+    .order('date_creation', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (postsError || !posts) {
@@ -142,7 +141,7 @@ export const getCentresFeed = async (
     .from('posts')
     .select('*', { count: 'exact' })
     .eq('org_type', 'centre_formation')
-    .order('created_at', { ascending: false })
+    .order('date_creation', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (postsError || !posts) {

@@ -19,7 +19,7 @@ export interface CommentResponse {
   post_id: string;
   user_id: string;
   commentaire: string;
-  created_at: string;
+  date_comment: string;
 }
 
 /**
@@ -119,7 +119,7 @@ export const commentPost = async (
       post_id: postId,
       user_id: userId,
       commentaire: payload.commentaire,
-      created_at: new Date().toISOString(),
+      date_comment: new Date().toISOString(),
     })
     .select()
     .single();
@@ -151,7 +151,7 @@ export const getComments = async (
     .from('post_comments')
     .select('*', { count: 'exact' })
     .eq('post_id', postId)
-    .order('created_at', { ascending: false })
+    .order('date_comment', { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) {

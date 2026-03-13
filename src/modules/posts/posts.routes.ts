@@ -2,7 +2,7 @@
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import * as PostsController from './posts.controller';
-import { createPostSchema, updatePostSchema } from './posts.schema';
+import { createPostSchema, updatePostSchema, createCommentSchema } from './posts.schema';
 import { authenticate, authorizeOrg } from '../../middleware';
 
 export const postsRoutes = async (
@@ -23,9 +23,21 @@ export const postsRoutes = async (
   );
 
   /**
+   * GET /posts/entity - Lister les posts par entité (université ou centre)
+   * Public - MUST come BEFORE /posts/:id to avoid being matched by :id parameter
+   */
+  app.get('/posts/entity', PostsController.listPostsByEntity as any);
+
+  /**
    * GET /posts - Lister les posts (public)
    */
   app.get('/posts', PostsController.listPosts as any);
+
+  /**
+   * GET /posts/:id - Récupérer un post
+   * Public
+   */
+  app.get('/posts/:id', PostsController.getPost);
 
   /**
    * POST /uploads - upload a file to Supabase Storage (server-side)
@@ -54,12 +66,6 @@ export const postsRoutes = async (
   );
 
   /**
-   * GET /posts/:id - Récupérer un post
-   * Public
-   */
-  app.get('/posts/:id', PostsController.getPost);
-
-  /**
    * PUT /posts/:id - Modifier un post
    * Protégé: authentifié + organisation APPROVED + propriétaire
    */
@@ -83,4 +89,22 @@ export const postsRoutes = async (
     },
     PostsController.deletePost as any
   );
+
+  /**
+   * POST /posts/:id/comments - Ajouter un commentaire (auth required)
+   */
+  app.post(
+    '/posts/:id/comments',
+    {
+      schema: createCommentSchema,
+      preHandler: [authenticate],
+    },
+    PostsController.createComment as any
+  );
+
+  /**
+   * GET /posts/:id/comments - Lister les commentaires d'un post
+   * Public
+   */
+  app.get('/posts/:id/comments', PostsController.listComments as any);
 };

@@ -35,14 +35,18 @@ const allowedOrigins = [
   'http://localhost:5502',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'null', // for file:// protocol
 ];
 
 app.addHook('onRequest', (request, reply, done) => {
-  const origin = (request.headers.origin as string) || undefined;
-  if (!origin || allowedOrigins.includes(origin)) {
-    reply.header('Access-Control-Allow-Origin', origin || '*');
+  const origin = (request.headers.origin as string) || 'null';
+  if (allowedOrigins.includes(origin)) {
+    reply.header('Access-Control-Allow-Origin', origin);
     reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (origin !== '*') {
+      reply.header('Access-Control-Allow-Credentials', 'true');
+    }
   }
   if (request.method === 'OPTIONS') {
     reply.code(204).send();
