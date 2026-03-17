@@ -211,6 +211,11 @@ export const uploadFile = async (
 
     request.log.info({ msg: 'Upload completed', url: publicUrl, bucket, path: filePath });
 
+    // Ajouter headers CORS pour compatibilité Flutter
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Headers', 'Range, Content-Type');
+    reply.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+
     reply.code(201).send({ success: true, url: publicUrl, bucket, path: filePath });
   } catch (error) {
     request.log.error(error);
