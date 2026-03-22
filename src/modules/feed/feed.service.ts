@@ -178,3 +178,58 @@ export const getCentresFeed = async (
     },
   };
 };
+
+/**
+ * Récupérer le feed d'une organisation spécifique (université ou centre)
+ */
+export const getOrganizationFeed = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  organizationType: 'universite' | 'centre_formation',
+  page: number = 1,
+  limit: number = 10
+): Promise<FeedResponse> => {
+  const offset = (page - 1) * limit;
+
+  const { data: posts, error: postsError, count } = await supabase
+    .from('posts')
+    .select('*', { count: 'exact' })
+    .eq('author_id', organizationId)
+    .eq('author_type', organizationType)
+    .order('date_creation', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (postsError || !posts) {
+    throw new Error(`Failed to fetch organization feed: ${postsError?.message}`);
+  }
+
+  // Enrichir avec les compteurs
+  const enrichedPosts = await Promise.all(
+    posts.map(async (post) => {
+      const { count: likesCount } = await supabase
+        .from('post_likes')
+        .select('id', { count: 'exact' })
+        .eq('post_id', post.id);
+
+      const { count: commentsCount } = await supabase
+        .from('post_comments')
+        .select('id', { count: 'exact' })
+        .eq('post_id', post.id);
+
+      return {
+        ...post,
+        likes_count: likesCount || 0,
+        comments_count: commentsCount || 0,
+      };
+    })
+  );
+
+  return {
+    data: enrichedPosts,
+    pagination: {
+      page,
+      limit,
+      total: count || 0,
+    },
+  };
+};

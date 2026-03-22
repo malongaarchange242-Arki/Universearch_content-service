@@ -24,4 +24,11 @@ export const feedRoutes = async (
    * Public avec pagination
    */
   app.get('/feed/centres', FeedController.getCentresFeed);
+
+  /**
+   * GET /feed/organization - Feed d'une organisation spécifique
+   * Public avec pagination
+   * Query params: organization_id, organization_type (universite ou centre), page, limit
+   */
+  app.get('/feed/organization', FeedController.getOrganizationFeed);
 };
