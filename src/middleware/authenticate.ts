@@ -27,7 +27,9 @@ export const authenticate = async (
   const token = authHeader.substring(7);
   const decoded = decodeJWT(token);
 
-  if (!decoded?.sub) {
+  const userId = decoded?.id || decoded?.sub;
+
+  if (!userId) {
     return reply.status(401).send({ error: 'Invalid token' });
   }
 
@@ -46,13 +48,17 @@ export const authenticate = async (
 
   if (normalized.includes('univers')) role = 'universite';
   if (normalized.includes('centre')) role = 'centre_formation';
+  if (normalized.includes('utilisateur')) role = 'utilisateur';
+  if (normalized.includes('admin')) role = 'admin';
+  if (normalized.includes('superviseur')) role = 'superviseur';
+  if (normalized.includes('bde')) role = 'bde';
 
   // 2️⃣ If missing, resolve from DB
   if (!role) {
     const { data: uni } = await fastify.supabase
       .from('universites')
       .select('profile_id')
-      .eq('profile_id', decoded.sub)
+      .eq('profile_id', userId)
       .maybeSingle();
 
     if (uni) {
@@ -61,23 +67,27 @@ export const authenticate = async (
       const { data: centre } = await fastify.supabase
         .from('centres_formation')
         .select('profile_id')
-        .eq('profile_id', decoded.sub)
+        .eq('profile_id', userId)
         .maybeSingle();
 
       if (centre) {
         role = 'centre_formation';
+      } else {
+        const { data: profile } = await fastify.supabase
+          .from('profiles')
+          .select('profile_type')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (profile?.profile_type) {
+          role = profile.profile_type;
+        }
       }
     }
   }
 
-  if (!role) {
-    return reply.status(403).send({
-      error: 'Forbidden: account is not an organization',
-    });
-  }
-
   request.user = {
-    id: decoded.sub,
+    id: userId,
     role,
     email: decoded.email,
   };
