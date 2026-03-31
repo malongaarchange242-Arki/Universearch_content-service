@@ -3,10 +3,10 @@
 export const createPostSchema = {
   body: {
     type: 'object',
-    required: ['titre', 'description'],
+    required: ['titre'],
     properties: {
       titre: { type: 'string', minLength: 1, maxLength: 500 },
-      description: { type: 'string', minLength: 1, maxLength: 5000 },
+      description: { type: ['string', 'null'], minLength: 0, maxLength: 5000, description: 'Description du post (optionnel)' },
       media_url: { type: ['string', 'null'], description: 'URL du média (si disponible)' },
       media_type: { type: ['string', 'null'], enum: ['image', 'video'], description: 'Type de média' }
     }

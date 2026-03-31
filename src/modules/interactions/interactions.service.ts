@@ -112,17 +112,39 @@ export const commentPost = async (
   }
 
   const commentId = randomUUID();
-  const { data, error } = await supabase
+  const now = new Date().toISOString();
+  const insertPayload = {
+    id: commentId,
+    post_id: postId,
+    user_id: userId,
+    contenu: payload.commentaire,
+    commentaire: payload.commentaire,
+    date_comment: now,
+  };
+
+  let { data, error } = await supabase
     .from('post_comments')
-    .insert({
-      id: commentId,
-      post_id: postId,
-      user_id: userId,
-      commentaire: payload.commentaire,
-      date_comment: new Date().toISOString(),
-    })
+    .insert(insertPayload)
     .select()
     .single();
+
+  // Older schemas may not have the `commentaire` alias column.
+  if (error && error.message.includes('commentaire')) {
+    const fallback = await supabase
+      .from('post_comments')
+      .insert({
+        id: commentId,
+        post_id: postId,
+        user_id: userId,
+        contenu: payload.commentaire,
+        date_comment: now,
+      })
+      .select()
+      .single();
+
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) {
     throw new Error(`Failed to comment post: ${error.message}`);

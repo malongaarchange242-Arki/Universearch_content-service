@@ -2,6 +2,7 @@
 
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import axios from 'axios';
 
 export interface CreatePostPayload {
   titre: string;
@@ -31,6 +32,104 @@ export interface PostResponse {
   statut: string;
   date_creation: string;
 }
+
+/**
+ * Récupérer les followers d'une université ou centre
+ */
+const getFollowers = async (
+  supabase: SupabaseClient,
+  entityId: string,
+  entityType: string
+): Promise<string[]> => {
+  try {
+    const tableName = entityType === 'universite' 
+      ? 'followers_universites' 
+      : 'followers_centres_formation';
+    
+    const columnName = entityType === 'universite' 
+      ? 'universite_id' 
+      : 'centre_id';
+
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('user_id')
+      .eq(columnName, entityId);
+
+    if (error) {
+      console.error(`Failed to get followers: ${error.message}`);
+      return [];
+    }
+
+    return (data || []).map((row: any) => row.user_id);
+  } catch (err) {
+    console.error('Error fetching followers:', err);
+    return [];
+  }
+};
+
+/**
+ * Envoyer une notification à chaque follower
+ */
+const notifyFollowers = async (
+  followerIds: string[],
+  post: PostResponse
+): Promise<void> => {
+  if (followerIds.length === 0) return;
+
+  try {
+    const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4000';
+    
+    // Créer un message de notification
+    const notificationMessage = `${post.author_id} a publié: "${post.titre}"`;
+    
+    // Envoyer une notification pour chaque follower
+    const promises = followerIds.map((userId) =>
+      axios.post(`${notificationServiceUrl}/api/notifications`, {
+        user_id: userId,
+        type: 'post',
+        message: notificationMessage,
+        data: {
+          post_id: post.id,
+          author_id: post.author_id,
+          author_type: post.author_type,
+          titre: post.titre,
+          description: post.description,
+        },
+      }).catch((err) => {
+        console.error(`Failed to send notification to user ${userId}:`, err.message);
+      })
+    );
+
+    await Promise.all(promises);
+    console.log(`✅ Notifications sent to ${followerIds.length} followers`);
+  } catch (err) {
+    console.error('Error notifying followers:', err);
+  }
+};
+
+/**
+ * Récupérer les info de l'entité (université ou centre)
+ */
+const getEntityInfo = async (
+  supabase: SupabaseClient,
+  entityId: string,
+  entityType: string
+): Promise<any> => {
+  try {
+    const tableName = entityType === 'universite' ? 'universites' : 'centres_formation';
+    
+    const { data } = await supabase
+      .from(tableName)
+      .select('id, nom, logo_url')
+      .eq('id', entityId)
+      .single();
+
+    return data;
+  } catch (err) {
+    console.error('Error fetching entity info:', err);
+    return null;
+  }
+};
 
 /**
  * Créer un post
@@ -66,7 +165,23 @@ export const createPost = async (
     throw new Error(`Failed to create post: ${error.message}`);
   }
 
-  return data as PostResponse;
+  const createdPost = data as PostResponse;
+
+  // 🔔 Envoyer des notifications aux followers (asynchrone, ne pas attendre)
+  try {
+    const followers = await getFollowers(supabase, authorId, authorType);
+    if (followers.length > 0) {
+      // Lancer de manière asynchrone pour ne pas bloquer la réponse
+      notifyFollowers(followers, createdPost).catch((err) => {
+        console.error('Notification broadcast failed:', err);
+      });
+    }
+  } catch (err) {
+    console.error('Error in notification flow:', err);
+    // Continue même si les notifications échouent
+  }
+
+  return createdPost;
 };
 
 /**
@@ -296,7 +411,11 @@ export const listComments = async (
 
   // Enrich comments with user information
   const commentsWithUsers = await enrichCommentsWithUsers(supabase, commentsData || []);
-  return commentsWithUsers as any[];
+  return commentsWithUsers.map((comment: any) => ({
+    ...comment,
+    commentaire: comment.commentaire ?? comment.contenu,
+    created_at: comment.created_at ?? comment.date_comment,
+  })) as any[];
 };
 
 /**

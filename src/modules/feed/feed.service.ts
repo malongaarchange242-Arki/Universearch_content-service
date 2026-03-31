@@ -88,7 +88,7 @@ export const getUniversitesFeed = async (
   const { data: posts, error: postsError, count } = await supabase
     .from('posts')
     .select('*', { count: 'exact' })
-    .eq('org_type', 'universite')
+    .eq('author_type', 'universite')
     .order('date_creation', { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -140,7 +140,7 @@ export const getCentresFeed = async (
   const { data: posts, error: postsError, count } = await supabase
     .from('posts')
     .select('*', { count: 'exact' })
-    .eq('org_type', 'centre_formation')
+    .eq('author_type', 'centre_formation')
     .order('date_creation', { ascending: false })
     .range(offset, offset + limit - 1);
 

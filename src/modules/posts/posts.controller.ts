@@ -14,7 +14,8 @@ export const createPost = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     // Log attempt
     request.log.info({ msg: 'Create post attempt', userId: user?.id, role: user?.role });
@@ -60,7 +61,8 @@ export const uploadFile = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabaseDefault = (request.server as any).supabase;
+    // 🔥 Use service role client for server-side uploads (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     // Debug: log incoming upload headers for troubleshooting
     request.log.info({ msg: 'Incoming upload request', headers: request.headers });
@@ -70,11 +72,6 @@ export const uploadFile = async (
       request.log.warn({ msg: 'Upload rejected: invalid content-type', contentType });
       return reply.status(400).send({ success: false, error: 'Invalid Content-Type: expected multipart/form-data' });
     }
-
-    // Use service role key if available for server-side uploads
-    const supabaseUrl = process.env.SUPABASE_URL as string;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string | undefined;
-    const supabase = serviceKey ? createClient(supabaseUrl, serviceKey) : supabaseDefault;
 
     // fastify-multipart exposes file via request.file()
     const mp: any = request as any;
@@ -310,7 +307,8 @@ export const updatePost = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     const post = await PostsService.updatePost(
       supabase,
@@ -342,7 +340,8 @@ export const deletePost = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     await PostsService.deletePost(supabase, request.params.id, user.id);
 
@@ -404,7 +403,8 @@ export const createComment = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
     const contenu = (request.body as any)?.contenu || '';
     const parentCommentId = (request.body as any)?.parent_comment_id || null;
 

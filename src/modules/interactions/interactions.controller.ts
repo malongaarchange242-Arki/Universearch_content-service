@@ -12,7 +12,8 @@ export const likePost = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     const like = await InteractionsService.likePost(
       supabase,
@@ -43,7 +44,8 @@ export const unlikePost = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     await InteractionsService.unlikePost(supabase, request.params.id, user.id);
 
@@ -69,7 +71,8 @@ export const commentPost = async (
 ): Promise<void> => {
   try {
     const user = (request.user as any);
-    const supabase = (request.server as any).supabase;
+    // 🔥 Use service role client to bypass RLS (backend is trusted)
+    const supabase = (request.server as any).supabaseAdmin;
 
     const comment = await InteractionsService.commentPost(
       supabase,

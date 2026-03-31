@@ -44,9 +44,10 @@ export const authorizeOrg = async (
       });
     }
 
-    if (data.statut !== 'APPROVED') {
+    // Allow APPROVED or PENDING organizations (not REJECTED, SUSPENDED, etc.)
+    if (!['APPROVED', 'PENDING'].includes(data.statut)) {
       return reply.status(403).send({
-        error: `Forbidden: Your organization account is not approved yet (status: ${data.statut})`,
+        error: `Forbidden: Your organization account status is ${data.statut} (must be APPROVED or PENDING)`,
       });
     }
   } catch (err) {
