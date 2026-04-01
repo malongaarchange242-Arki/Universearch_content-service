@@ -418,6 +418,93 @@ export const listComments = async (
   })) as any[];
 };
 
+export const listViewerScopedComments = async (
+  supabase: SupabaseClient,
+  postId: string,
+  viewerUserId: string,
+  limit = 50
+): Promise<any[]> => {
+  const { data: ownComments, error: ownCommentsError } = await supabase
+    .from('post_comments')
+    .select(`
+      id,
+      post_id,
+      user_id,
+      contenu,
+      date_comment,
+      parent_comment_id
+    `)
+    .eq('post_id', postId)
+    .eq('user_id', viewerUserId)
+    .order('date_comment', { ascending: true })
+    .limit(limit);
+
+  if (ownCommentsError) {
+    throw new Error(`Failed to list viewer comments: ${ownCommentsError.message}`);
+  }
+
+  const ownCommentList = ownComments || [];
+  if (ownCommentList.length === 0) {
+    return [];
+  }
+
+  const ownCommentIds = ownCommentList.map((comment: any) => comment.id);
+  let replyRows: any[] = [];
+
+  try {
+    const { data: replies, error: repliesError } = await supabase
+      .from('post_comments')
+      .select(`
+        id,
+        post_id,
+        user_id,
+        contenu,
+        date_comment,
+        parent_comment_id
+      `)
+      .eq('post_id', postId)
+      .in('parent_comment_id', ownCommentIds)
+      .order('date_comment', { ascending: true })
+      .limit(limit);
+
+    if (repliesError) {
+      throw repliesError;
+    }
+
+    replyRows = replies || [];
+  } catch (error) {
+    // Older schemas may not have parent_comment_id yet.
+    if (!(error as Error).message.includes('parent_comment_id')) {
+      throw new Error(`Failed to list viewer replies: ${(error as Error).message}`);
+    }
+  }
+
+  const enrichedOwnComments = await enrichCommentsWithUsers(
+    supabase,
+    ownCommentList
+  );
+  const enrichedReplies = await enrichCommentsWithUsers(supabase, replyRows);
+
+  const universityReplies = enrichedReplies.filter(
+    (comment: any) =>
+      comment.parent_comment_id &&
+      ownCommentIds.includes(comment.parent_comment_id) &&
+      comment.user?.type === 'university'
+  );
+
+  const merged = [...enrichedOwnComments, ...universityReplies].sort(
+    (a: any, b: any) =>
+      new Date(a.date_comment || a.created_at || 0).getTime() -
+      new Date(b.date_comment || b.created_at || 0).getTime()
+  );
+
+  return merged.map((comment: any) => ({
+    ...comment,
+    commentaire: comment.commentaire ?? comment.contenu,
+    created_at: comment.created_at ?? comment.date_comment,
+  })) as any[];
+};
+
 /**
  * Enrich comments with user information (university or center)
  */

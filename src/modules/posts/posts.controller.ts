@@ -4,6 +4,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import * as PostsService from './posts.service';
+import { resolveAuthenticatedUser } from '../../middleware/authenticate';
 
 /**
  * Créer un post
@@ -431,8 +432,32 @@ export const listComments = async (
   try {
     const supabase = (request.server as any).supabase;
     const limit = Number((request.query as any)?.limit || 50);
+    const scope = ((request.query as any)?.scope || '').toString().toLowerCase();
+    let comments: any[];
 
-    const comments = await PostsService.listComments(supabase, request.params.id, limit);
+    if (scope === 'viewer') {
+      const viewer = await resolveAuthenticatedUser(request);
+      if (!viewer) {
+        return reply.status(401).send({
+          success: false,
+          error: 'Authentication required for viewer-scoped comments',
+        });
+      }
+
+      comments = await PostsService.listViewerScopedComments(
+        supabase,
+        request.params.id,
+        viewer.id,
+        limit
+      );
+    } else {
+      comments = await PostsService.listComments(
+        supabase,
+        request.params.id,
+        limit
+      );
+    }
+
     reply.send({ success: true, data: comments });
   } catch (error) {
     request.log.error(error);
