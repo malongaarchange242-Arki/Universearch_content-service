@@ -485,14 +485,16 @@ export const listViewerScopedComments = async (
   );
   const enrichedReplies = await enrichCommentsWithUsers(supabase, replyRows);
 
-  const universityReplies = enrichedReplies.filter(
+  const organizationReplies = enrichedReplies.filter(
     (comment: any) =>
       comment.parent_comment_id &&
       ownCommentIds.includes(comment.parent_comment_id) &&
-      comment.user?.type === 'university'
+      ['university', 'center', 'centre', 'centre_formation'].includes(
+        comment.user?.type
+      )
   );
 
-  const merged = [...enrichedOwnComments, ...universityReplies].sort(
+  const merged = [...enrichedOwnComments, ...organizationReplies].sort(
     (a: any, b: any) =>
       new Date(a.date_comment || a.created_at || 0).getTime() -
       new Date(b.date_comment || b.created_at || 0).getTime()
