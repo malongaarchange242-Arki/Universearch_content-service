@@ -512,59 +512,61 @@ const enrichCommentsWithUsers = async (supabase: SupabaseClient, comments: any[]
   if (!comments || comments.length === 0) return [];
 
   const userIds = comments.map(c => c.user_id);
-  console.log('Enriching comments for user IDs:', userIds);
-
-  // Get universities
   const { data: universities, error: uniError } = await supabase
     .from('universites')
     .select('id, nom, sigle')
     .in('id', userIds);
 
-  if (uniError) console.log('Universities query error:', uniError);
-
-  // Get centers
   const { data: centers, error: centerError } = await supabase
     .from('centres_formation')
     .select('id, nom, sigle')
     .in('id', userIds);
 
-  if (centerError) console.log('Centers query error:', centerError);
-
-  // Get regular users
-  const { data: users, error: userError } = await supabase
-    .from('utilisateurs')
-    .select('id, nom, prenom')
+  const { data: profiles, error: profileError } = await supabase
+    .from('profiles')
+    .select('id, nom, prenom, profile_type')
     .in('id', userIds);
 
-  if (userError) console.log('Users query error:', userError);
+  if (uniError) {
+    console.error('Universities query error:', uniError);
+  }
 
-  const userMap = new Map();
+  if (centerError) {
+    console.error('Centers query error:', centerError);
+  }
 
-  // Add universities to map
+  if (profileError) {
+    console.error('Profiles query error:', profileError);
+  }
+
+  const userMap = new Map<string, { name: string; sigle?: string; type: string }>();
+
   (universities || []).forEach(u => {
     userMap.set(u.id, { name: u.nom, sigle: u.sigle, type: 'university' });
-    console.log('Added university:', u.id, u.nom);
   });
 
-  // Add centers to map
   (centers || []).forEach(c => {
     userMap.set(c.id, { name: c.nom, sigle: c.sigle, type: 'center' });
-    console.log('Added center:', c.id, c.nom);
   });
 
-  // Add regular users to map
-  (users || []).forEach(u => {
-    const fullName = `${u.prenom} ${u.nom}`.trim();
-    userMap.set(u.id, { name: fullName, type: 'user' });
-    console.log('Added user:', u.id, fullName);
+  (profiles || []).forEach((profile: any) => {
+    if (userMap.has(profile.id)) {
+      return;
+    }
+
+    const fullName = [profile.prenom, profile.nom]
+      .filter((value) => value && String(value).trim().length > 0)
+      .join(' ')
+      .trim();
+
+    userMap.set(profile.id, {
+      name: fullName || profile.nom || profile.email || 'Utilisateur',
+      type: profile.profile_type === 'utilisateur' ? 'user' : profile.profile_type || 'user',
+    });
   });
 
-  console.log('User map size:', userMap.size);
-
-  // Enrich comments with user info
   return comments.map(comment => {
     const userInfo = userMap.get(comment.user_id);
-    console.log('Comment', comment.id, 'user_id:', comment.user_id, 'userInfo:', userInfo);
     return {
       ...comment,
       user: userInfo ? {

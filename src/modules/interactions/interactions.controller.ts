@@ -3,6 +3,35 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as InteractionsService from './interactions.service';
 
+export const getLikeStatus = async (
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const user = request.user as any;
+    const supabase = (request.server as any).supabaseAdmin;
+    const liked = await InteractionsService.isPostLikedByUser(
+      supabase,
+      request.params.id,
+      user.id
+    );
+
+    reply.send({
+      success: true,
+      data: {
+        post_id: request.params.id,
+        liked,
+      },
+    });
+  } catch (error) {
+    request.log.error(error);
+    reply.status(400).send({
+      success: false,
+      error: (error as Error).message,
+    });
+  }
+};
+
 /**
  * Aimer un post
  */

@@ -19,6 +19,12 @@ export const interactionsRoutes = async (
     InteractionsController.likePost as any
   );
 
+  app.get(
+    '/posts/:id/like-status',
+    { preHandler: [authenticate] },
+    InteractionsController.getLikeStatus as any
+  );
+
   /**
    * DELETE /posts/:id/like - Retirer un like
    * Protégé: authentifié

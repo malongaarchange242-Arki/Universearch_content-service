@@ -22,6 +22,25 @@ export interface CommentResponse {
   date_comment: string;
 }
 
+export const isPostLikedByUser = async (
+  supabase: SupabaseClient,
+  postId: string,
+  userId: string
+): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from('post_likes')
+    .select('id')
+    .eq('post_id', postId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to fetch like status: ${error.message}`);
+  }
+
+  return !!data;
+};
+
 /**
  * Aimer un post
  */
