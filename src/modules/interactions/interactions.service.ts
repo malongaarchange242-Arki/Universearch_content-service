@@ -22,6 +22,18 @@ export interface CommentResponse {
   date_comment: string;
 }
 
+export interface ViewPayload {
+  view_duration?: number | null;
+}
+
+export interface PostViewResponse {
+  id: string;
+  post_id: string;
+  user_id: string | null;
+  view_duration: number | null;
+  date_view: string;
+}
+
 export const isPostLikedByUser = async (
   supabase: SupabaseClient,
   postId: string,
@@ -201,6 +213,141 @@ export const getComments = async (
 
   return {
     data: comments as CommentResponse[],
+    total: count || 0,
+    page,
+    limit,
+  };
+};
+
+/**
+ * Enregistrer une vue sur un post
+ */
+export const recordPostView = async (
+  supabase: SupabaseClient,
+  postId: string,
+  userId: string | null,
+  payload: ViewPayload = {}
+): Promise<PostViewResponse> => {
+  const { data: post, error: postError } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('id', postId)
+    .single();
+
+  if (postError || !post) {
+    throw new Error('Post not found');
+  }
+
+  const viewId = randomUUID();
+  const now = new Date().toISOString();
+  const normalizedDuration =
+    typeof payload.view_duration === 'number' && Number.isFinite(payload.view_duration)
+      ? Math.max(0, Math.round(payload.view_duration))
+      : null;
+
+  let { data, error } = await supabase
+    .from('post_views')
+    .insert({
+      id: viewId,
+      post_id: postId,
+      user_id: userId,
+      view_duration: normalizedDuration,
+      date_view: now,
+    })
+    .select()
+    .single();
+
+  // Older schemas may still use created_at instead of date_view and lack view_duration.
+  if (
+    error &&
+    (error.message.includes('view_duration') || error.message.includes('date_view'))
+  ) {
+    const fallback = await supabase
+      .from('post_views')
+      .insert({
+        id: viewId,
+        post_id: postId,
+        user_id: userId,
+        created_at: now,
+      })
+      .select()
+      .single();
+
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(`Failed to record post view: ${error.message}`);
+  }
+
+  return {
+    id: data.id,
+    post_id: data.post_id,
+    user_id: data.user_id ?? null,
+    view_duration: data.view_duration ?? normalizedDuration ?? null,
+    date_view: data.date_view ?? data.created_at ?? now,
+  };
+};
+
+/**
+ * Récupérer les vues d'un post
+ */
+export const getPostViews = async (
+  supabase: SupabaseClient,
+  postId: string,
+  page: number = 1,
+  limit: number = 20
+): Promise<{
+  data: PostViewResponse[];
+  total: number;
+  page: number;
+  limit: number;
+}> => {
+  const offset = (page - 1) * limit;
+
+  let query = supabase
+    .from('post_views')
+    .select('id, post_id, user_id, view_duration, date_view', { count: 'exact' })
+    .eq('post_id', postId)
+    .order('date_view', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  let { data, error, count } = await query;
+
+  if (error && (error.message.includes('view_duration') || error.message.includes('date_view'))) {
+    const fallback = await supabase
+      .from('post_views')
+      .select('id, post_id, user_id, created_at', { count: 'exact' })
+      .eq('post_id', postId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    data = (fallback.data || []).map((row: any) => ({
+      id: row.id,
+      post_id: row.post_id,
+      user_id: row.user_id ?? null,
+      view_duration: null,
+      date_view: row.created_at,
+    }));
+    error = fallback.error;
+    count = fallback.count;
+  } else if (data) {
+    data = data.map((row: any) => ({
+      id: row.id,
+      post_id: row.post_id,
+      user_id: row.user_id ?? null,
+      view_duration: row.view_duration ?? null,
+      date_view: row.date_view,
+    }));
+  }
+
+  if (error) {
+    throw new Error(`Failed to fetch post views: ${error.message}`);
+  }
+
+  return {
+    data: (data || []) as PostViewResponse[],
     total: count || 0,
     page,
     limit,

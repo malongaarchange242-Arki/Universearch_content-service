@@ -2,6 +2,7 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as InteractionsService from './interactions.service';
+import { resolveAuthenticatedUser } from '../../middleware/authenticate';
 
 export const getLikeStatus = async (
   request: FastifyRequest<{ Params: { id: string } }>,
@@ -145,6 +146,79 @@ export const getComments = async (
     reply.send({
       success: true,
       data: result.data,
+      pagination: {
+        page: result.page,
+        limit: result.limit,
+        total: result.total,
+      },
+    });
+  } catch (error) {
+    request.log.error(error);
+    reply.status(400).send({
+      success: false,
+      error: (error as Error).message,
+    });
+  }
+};
+
+/**
+ * Enregistrer une vue
+ */
+export const recordView = async (
+  request: FastifyRequest<{
+    Params: { id: string };
+    Body: InteractionsService.ViewPayload;
+  }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const viewer = await resolveAuthenticatedUser(request);
+    const supabase = (request.server as any).supabaseAdmin;
+
+    const view = await InteractionsService.recordPostView(
+      supabase,
+      request.params.id,
+      viewer?.id || null,
+      request.body || {}
+    );
+
+    reply.status(201).send({
+      success: true,
+      data: view,
+    });
+  } catch (error) {
+    request.log.error(error);
+    const statusCode = (error as Error).message.includes('Post not found') ? 404 : 400;
+    reply.status(statusCode).send({
+      success: false,
+      error: (error as Error).message,
+    });
+  }
+};
+
+/**
+ * Récupérer les vues d'un post
+ */
+export const getViews = async (
+  request: FastifyRequest<{ Params: { id: string }; Querystring: { page?: number; limit?: number } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const supabase = (request.server as any).supabaseAdmin;
+    const page = request.query.page || 1;
+    const limit = request.query.limit || 20;
+
+    const result = await InteractionsService.getPostViews(
+      supabase,
+      request.params.id,
+      page,
+      limit
+    );
+
+    reply.send({
+      success: true,
+      data: result.data,
+      views_count: result.total,
       pagination: {
         page: result.page,
         limit: result.limit,

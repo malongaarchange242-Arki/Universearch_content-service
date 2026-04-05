@@ -62,11 +62,13 @@ CREATE TABLE IF NOT EXISTS post_views (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
   user_id UUID,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  view_duration INTEGER,
+  date_view TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
 CREATE INDEX idx_post_views_post_id ON post_views(post_id);
 CREATE INDEX idx_post_views_user_id ON post_views(user_id);
+CREATE INDEX idx_post_views_date_view ON post_views(date_view DESC);
 
 -- Table: post_shares
 CREATE TABLE IF NOT EXISTS post_shares (

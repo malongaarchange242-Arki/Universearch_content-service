@@ -2,7 +2,11 @@
 
 import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import * as InteractionsController from './interactions.controller';
-import { createCommentSchema, getCommentsSchema } from './interactions.schema';
+import {
+  createCommentSchema,
+  getViewsSchema,
+  recordViewSchema,
+} from './interactions.schema';
 import { authenticate } from '../../middleware';
 
 export const interactionsRoutes = async (
@@ -46,5 +50,29 @@ export const interactionsRoutes = async (
       preHandler: [authenticate],
     },
     InteractionsController.commentPost as any
+  );
+
+  /**
+   * POST /posts/:id/view - Enregistrer une vue
+   * Public, avec user_id si Authorization fournie
+   */
+  app.post(
+    '/posts/:id/view',
+    {
+      schema: recordViewSchema,
+    },
+    InteractionsController.recordView as any
+  );
+
+  /**
+   * GET /posts/:id/views - Lister les vues d'un post
+   * Public
+   */
+  app.get(
+    '/posts/:id/views',
+    {
+      schema: getViewsSchema,
+    },
+    InteractionsController.getViews as any
   );
 };

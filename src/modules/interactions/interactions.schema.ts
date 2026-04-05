@@ -33,3 +33,36 @@ export const getCommentsSchema = {
     }
   }
 };
+
+export const recordViewSchema = {
+  body: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      view_duration: {
+        type: 'integer',
+        minimum: 0,
+        description: 'Durée de vue en secondes'
+      }
+    }
+  }
+};
+
+export const getViewsSchema = {
+  querystring: {
+    type: 'object',
+    properties: {
+      page: {
+        type: 'integer',
+        default: 1,
+        minimum: 1
+      },
+      limit: {
+        type: 'integer',
+        default: 20,
+        minimum: 1,
+        maximum: 100
+      }
+    }
+  }
+};
