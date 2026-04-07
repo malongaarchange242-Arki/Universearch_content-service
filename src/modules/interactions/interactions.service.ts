@@ -4,6 +4,9 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 
+const DEFAULT_NOTIFICATION_SERVICE_URL =
+  'https://universearch-notification-service.onrender.com';
+
 export interface LikeResponse {
   id: string;
   post_id: string;
@@ -36,7 +39,7 @@ export interface PostViewResponse {
 }
 
 const notificationServiceUrl =
-  process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4000';
+  process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL;
 
 const notifyPostOwner = async (
   recipientId: string,
@@ -50,23 +53,40 @@ const notifyPostOwner = async (
 ): Promise<void> => {
   if (!recipientId || recipientId === payload.actorId) return;
 
-  await axios.post(`${notificationServiceUrl}/api/notifications`, {
-    user_id: recipientId,
-    type: payload.type,
-    message: payload.body,
-    delivery_types: ['in_app', 'push'],
-    data: {
-      title: payload.type === 'like' ? 'Nouveau like' : 'Nouveau commentaire',
-      body: payload.body,
-      type: payload.type,
-      entity_id: payload.postId,
-      post_id: payload.postId,
-      actor_id: payload.actorId,
-      post_title: payload.postTitle || '',
-    },
-  }).catch((error) => {
-    console.error(`Failed to notify post owner for ${payload.type}:`, error.message);
-  });
+  await axios
+    .post(
+      `${notificationServiceUrl}/api/notifications`,
+      {
+        user_id: recipientId,
+        type: payload.type,
+        message: payload.body,
+        delivery_types: ['in_app', 'push'],
+        data: {
+          title: payload.type === 'like' ? 'Nouveau like' : 'Nouveau commentaire',
+          body: payload.body,
+          type: payload.type,
+          entity_id: payload.postId,
+          post_id: payload.postId,
+          actor_id: payload.actorId,
+          post_title: payload.postTitle || '',
+        },
+      },
+      {
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    )
+    .catch((error) => {
+      const details =
+        error?.response?.data ??
+        error?.message ??
+        error?.code ??
+        error;
+
+      console.error(`Failed to notify post owner for ${payload.type}:`, details);
+    });
 };
 
 export const isPostLikedByUser = async (
