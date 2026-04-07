@@ -33,8 +33,22 @@ export interface PostResponse {
   date_creation: string;
 }
 
+interface AuthorEntityInfo {
+  id: string;
+  name: string;
+  sigle?: string | null;
+  logo_url?: string | null;
+  description?: string | null;
+  type: 'universite' | 'centre_formation';
+}
+
+const normalizeEntityType = (
+  entityType: string
+): 'universite' | 'centre_formation' =>
+  entityType === 'universite' ? 'universite' : 'centre_formation';
+
 /**
- * Récupérer les followers d'une université ou centre
+ * RÃ©cupÃ©rer les followers d'une universitÃ© ou centre
  */
 const getFollowers = async (
   supabase: SupabaseClient,
@@ -42,11 +56,12 @@ const getFollowers = async (
   entityType: string
 ): Promise<string[]> => {
   try {
-    const tableName = entityType === 'universite' 
+    const normalizedType = normalizeEntityType(entityType);
+    const tableName = normalizedType === 'universite'
       ? 'followers_universites' 
       : 'followers_centres_formation';
     
-    const columnName = entityType === 'universite' 
+    const columnName = normalizedType === 'universite'
       ? 'universite_id' 
       : 'centre_id';
 
@@ -68,30 +83,37 @@ const getFollowers = async (
 };
 
 /**
- * Envoyer une notification à chaque follower
+ * Envoyer une notification Ã  chaque follower
  */
 const notifyFollowers = async (
   followerIds: string[],
-  post: PostResponse
+  post: PostResponse,
+  entityInfo?: AuthorEntityInfo | null
 ): Promise<void> => {
   if (followerIds.length === 0) return;
 
   try {
     const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4000';
-    
-    // Créer un message de notification
-    const notificationMessage = `${post.author_id} a publié: "${post.titre}"`;
-    
-    // Envoyer une notification pour chaque follower
+    const organizationName = entityInfo?.name || entityInfo?.sigle || post.author_id;
+    const organizationId = entityInfo?.id || post.author_id;
+    const organizationType = entityInfo?.type || normalizeEntityType(post.author_type);
+    const notificationMessage = `${organizationName} a publié : "${post.titre}"`;
+
     const promises = followerIds.map((userId) =>
       axios.post(`${notificationServiceUrl}/api/notifications`, {
         user_id: userId,
         type: 'post',
+        title: 'Nouveau post',
         message: notificationMessage,
+        delivery_types: ['in_app', 'push'],
         data: {
           post_id: post.id,
-          author_id: post.author_id,
-          author_type: post.author_type,
+          author_id: organizationId,
+          author_type: organizationType,
+          institution_id: organizationId,
+          institution_name: organizationName,
+          institution_logo_url: entityInfo?.logo_url || null,
+          institution_description: entityInfo?.description || null,
           titre: post.titre,
           description: post.description,
         },
@@ -101,38 +123,86 @@ const notifyFollowers = async (
     );
 
     await Promise.all(promises);
-    console.log(`✅ Notifications sent to ${followerIds.length} followers`);
+    console.log(`Notifications sent to ${followerIds.length} followers`);
   } catch (err) {
     console.error('Error notifying followers:', err);
   }
 };
 
 /**
- * Récupérer les info de l'entité (université ou centre)
+ * RÃ©cupÃ©rer les info de l'entitÃ© (universitÃ© ou centre)
  */
 const getEntityInfo = async (
   supabase: SupabaseClient,
   entityId: string,
   entityType: string
-): Promise<any> => {
+): Promise<AuthorEntityInfo | null> => {
   try {
-    const tableName = entityType === 'universite' ? 'universites' : 'centres_formation';
-    
+    const normalizedType = normalizeEntityType(entityType);
+    const tableName = normalizedType === 'universite' ? 'universites' : 'centres_formation';
+
     const { data } = await supabase
       .from(tableName)
-      .select('id, nom, logo_url')
+      .select('id, nom, sigle, logo_url, description')
       .eq('id', entityId)
       .single();
 
-    return data;
+    if (!data) {
+      return null;
+    }
+
+    return {
+      id: data.id,
+      name: data.nom,
+      sigle: data.sigle,
+      logo_url: data.logo_url,
+      description: data.description,
+      type: normalizedType,
+    };
   } catch (err) {
     console.error('Error fetching entity info:', err);
     return null;
   }
 };
 
+const resolveAuthorEntity = async (
+  supabase: SupabaseClient,
+  authorId: string,
+  authorType: string
+): Promise<AuthorEntityInfo | null> => {
+  const normalizedType = normalizeEntityType(authorType);
+  const tableName = normalizedType === 'universite' ? 'universites' : 'centres_formation';
+
+  try {
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('id, nom, sigle, logo_url, description, profile_id')
+      .eq('profile_id', authorId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error resolving author entity by profile_id:', error);
+    }
+
+    if (data) {
+      return {
+        id: data.id,
+        name: data.nom,
+        sigle: data.sigle,
+        logo_url: data.logo_url,
+        description: data.description,
+        type: normalizedType,
+      };
+    }
+  } catch (err) {
+    console.error('Error resolving author entity:', err);
+  }
+
+  return getEntityInfo(supabase, authorId, normalizedType);
+};
+
 /**
- * Créer un post
+ * CrÃ©er un post
  */
 export const createPost = async (
   supabase: SupabaseClient,
@@ -167,25 +237,30 @@ export const createPost = async (
 
   const createdPost = data as PostResponse;
 
-  // 🔔 Envoyer des notifications aux followers (asynchrone, ne pas attendre)
+  // ðŸ”” Envoyer des notifications aux followers (asynchrone, ne pas attendre)
   try {
-    const followers = await getFollowers(supabase, authorId, authorType);
+    const authorEntity = await resolveAuthorEntity(supabase, authorId, authorType);
+    const followers = await getFollowers(
+      supabase,
+      authorEntity?.id || authorId,
+      authorType
+    );
     if (followers.length > 0) {
-      // Lancer de manière asynchrone pour ne pas bloquer la réponse
-      notifyFollowers(followers, createdPost).catch((err) => {
+      // Lancer de maniÃ¨re asynchrone pour ne pas bloquer la rÃ©ponse
+      notifyFollowers(followers, createdPost, authorEntity).catch((err) => {
         console.error('Notification broadcast failed:', err);
       });
     }
   } catch (err) {
     console.error('Error in notification flow:', err);
-    // Continue même si les notifications échouent
+    // Continue mÃªme si les notifications Ã©chouent
   }
 
   return createdPost;
 };
 
 /**
- * Lister les posts (récupération publique)
+ * Lister les posts (rÃ©cupÃ©ration publique)
  */
 export const listPosts = async (
   supabase: SupabaseClient,
@@ -247,7 +322,7 @@ export const listPosts = async (
 };
 
 /**
- * Lister les posts par entité (université ou centre)
+ * Lister les posts par entitÃ© (universitÃ© ou centre)
  */
 export const listPostsByEntity = async (
   supabase: SupabaseClient,
@@ -300,7 +375,7 @@ export const listPostsByEntity = async (
 };
 
 /**
- * Créer un commentaire pour un post
+ * CrÃ©er un commentaire pour un post
  */
 export const createComment = async (
   supabase: SupabaseClient,
@@ -581,7 +656,7 @@ const enrichCommentsWithUsers = async (supabase: SupabaseClient, comments: any[]
 };
 
 /**
- * Récupérer un post par ID
+ * RÃ©cupÃ©rer un post par ID
  */
 export const getPost = async (
   supabase: SupabaseClient,
@@ -597,7 +672,7 @@ export const getPost = async (
     throw new Error('Post not found');
   }
 
-  // Récupérer les compteurs (si ces tables existent)
+  // RÃ©cupÃ©rer les compteurs (si ces tables existent)
   const { count: likesCount } = await supabase
     .from('post_likes')
     .select('id', { count: 'exact' })
@@ -616,7 +691,7 @@ export const getPost = async (
 };
 
 /**
- * Mettre à jour un post
+ * Mettre Ã  jour un post
  */
 export const updatePost = async (
   supabase: SupabaseClient,
@@ -624,7 +699,7 @@ export const updatePost = async (
   authorId: string,
   payload: UpdatePostPayload
 ): Promise<PostResponse> => {
-  // Vérifier que l'auteur du post est bien l'auteur connecté
+  // VÃ©rifier que l'auteur du post est bien l'auteur connectÃ©
   const { data: post, error: fetchError } = await supabase
     .from('posts')
     .select('author_id')
@@ -665,7 +740,7 @@ export const deletePost = async (
   postId: string,
   authorId: string
 ): Promise<void> => {
-  // Vérifier que l'auteur du post est bien l'auteur connecté
+  // VÃ©rifier que l'auteur du post est bien l'auteur connectÃ©
   const { data: post, error: fetchError } = await supabase
     .from('posts')
     .select('author_id')
@@ -696,3 +771,4 @@ export const deletePost = async (
     throw new Error(`Failed to delete post: ${error.message}`);
   }
 };
+

@@ -1,6 +1,7 @@
 // src/modules/interactions/interactions.service.ts
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import axios from 'axios';
 import { randomUUID } from 'crypto';
 
 export interface LikeResponse {
@@ -34,6 +35,40 @@ export interface PostViewResponse {
   date_view: string;
 }
 
+const notificationServiceUrl =
+  process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4000';
+
+const notifyPostOwner = async (
+  recipientId: string,
+  payload: {
+    type: 'like' | 'comment';
+    actorId: string;
+    postId: string;
+    postTitle?: string | null;
+    body: string;
+  }
+): Promise<void> => {
+  if (!recipientId || recipientId === payload.actorId) return;
+
+  await axios.post(`${notificationServiceUrl}/api/notifications`, {
+    user_id: recipientId,
+    type: payload.type,
+    message: payload.body,
+    delivery_types: ['in_app', 'push'],
+    data: {
+      title: payload.type === 'like' ? 'Nouveau like' : 'Nouveau commentaire',
+      body: payload.body,
+      type: payload.type,
+      entity_id: payload.postId,
+      post_id: payload.postId,
+      actor_id: payload.actorId,
+      post_title: payload.postTitle || '',
+    },
+  }).catch((error) => {
+    console.error(`Failed to notify post owner for ${payload.type}:`, error.message);
+  });
+};
+
 export const isPostLikedByUser = async (
   supabase: SupabaseClient,
   postId: string,
@@ -64,7 +99,7 @@ export const likePost = async (
   // Vérifier que le post existe
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('id')
+    .select('id, author_id, titre')
     .eq('id', postId)
     .single();
 
@@ -100,6 +135,14 @@ export const likePost = async (
     throw new Error(`Failed to like post: ${error.message}`);
   }
 
+  void notifyPostOwner(post.author_id, {
+    type: 'like',
+    actorId: userId,
+    postId,
+    postTitle: post.titre,
+    body: `${userId} a aime votre post${post.titre ? `: "${post.titre}"` : ''}`,
+  });
+
   return data;
 };
 
@@ -134,7 +177,7 @@ export const commentPost = async (
   // Vérifier que le post existe
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('id')
+    .select('id, author_id, titre')
     .eq('id', postId)
     .single();
 
@@ -180,6 +223,14 @@ export const commentPost = async (
   if (error) {
     throw new Error(`Failed to comment post: ${error.message}`);
   }
+
+  void notifyPostOwner(post.author_id, {
+    type: 'comment',
+    actorId: userId,
+    postId,
+    postTitle: post.titre,
+    body: `${userId} a commente votre post${post.titre ? `: "${post.titre}"` : ''}`,
+  });
 
   return data;
 };
@@ -230,7 +281,7 @@ export const recordPostView = async (
 ): Promise<PostViewResponse> => {
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('id')
+    .select('id, author_id, titre')
     .eq('id', postId)
     .single();
 
