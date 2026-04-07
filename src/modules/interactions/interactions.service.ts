@@ -38,6 +38,15 @@ export interface PostViewResponse {
   date_view: string;
 }
 
+interface PostViewRow {
+  id: string;
+  post_id: string;
+  user_id: string | null;
+  view_duration?: number | null;
+  date_view?: string | null;
+  created_at?: string | null;
+}
+
 const notificationServiceUrl =
   process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL;
 
@@ -60,12 +69,15 @@ const getExistingPostView = async (
   fallbackDate: string,
   fallbackDuration: number | null
 ): Promise<PostViewResponse | null> => {
-  let { data, error } = await supabase
+  const initialResult = await supabase
     .from('post_views')
     .select('id, post_id, user_id, view_duration, date_view, created_at')
     .eq('post_id', postId)
     .eq('user_id', userId)
     .maybeSingle();
+
+  let data = initialResult.data as PostViewRow | null;
+  let error = initialResult.error;
 
   if (
     error &&
@@ -78,7 +90,7 @@ const getExistingPostView = async (
       .eq('user_id', userId)
       .maybeSingle();
 
-    data = fallback.data;
+    data = fallback.data as PostViewRow | null;
     error = fallback.error;
   }
 
@@ -378,7 +390,7 @@ export const recordPostView = async (
     }
   }
 
-  let { data, error } = await supabase
+  const initialInsert = await supabase
     .from('post_views')
     .insert({
       id: viewId,
@@ -389,6 +401,9 @@ export const recordPostView = async (
     })
     .select()
     .single();
+
+  let data = initialInsert.data as PostViewRow | null;
+  let error = initialInsert.error;
 
   // Older schemas may still use created_at instead of date_view and lack view_duration.
   if (
@@ -406,7 +421,7 @@ export const recordPostView = async (
       .select()
       .single();
 
-    data = fallback.data;
+    data = fallback.data as PostViewRow | null;
     error = fallback.error;
   }
 
@@ -432,7 +447,7 @@ export const recordPostView = async (
     throw new Error(`Failed to record post view: ${error.message}`);
   }
 
-  return mapPostViewResponse(data, now, normalizedDuration);
+  return mapPostViewResponse(data as PostViewRow, now, normalizedDuration);
 };
 
 /**

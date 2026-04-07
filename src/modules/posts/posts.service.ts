@@ -45,6 +45,11 @@ interface AuthorEntityInfo {
   type: 'universite' | 'centre_formation';
 }
 
+interface BroadcastNotificationsResponse {
+  count?: number;
+  errors?: unknown[];
+}
+
 const normalizeEntityType = (
   entityType: string
 ): 'universite' | 'centre_formation' =>
@@ -102,7 +107,7 @@ const notifyFollowers = async (
     const organizationId = entityInfo?.id || post.author_id;
     const organizationType = entityInfo?.type || normalizeEntityType(post.author_type);
     const notificationMessage = `${organizationName} a publiÃ© : "${post.titre}"`;
-    const response = await axios.post(
+    const response = await axios.post<BroadcastNotificationsResponse>(
       `${notificationServiceUrl}/api/notifications/broadcast`,
       {
         user_ids: followerIds,
@@ -130,13 +135,15 @@ const notifyFollowers = async (
       }
     );
 
+    const broadcastResponse = response.data;
+
     const deliveredCount =
-      typeof response.data?.count === 'number'
-        ? response.data.count
+      typeof broadcastResponse?.count === 'number'
+        ? broadcastResponse.count
         : followerIds.length;
 
-    const errors = Array.isArray(response.data?.errors)
-      ? response.data.errors
+    const errors = Array.isArray(broadcastResponse?.errors)
+      ? broadcastResponse.errors
       : [];
 
     if (errors.length > 0) {
