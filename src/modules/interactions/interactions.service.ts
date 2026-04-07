@@ -41,6 +41,54 @@ export interface PostViewResponse {
 const notificationServiceUrl =
   process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL;
 
+const mapPostViewResponse = (
+  row: any,
+  fallbackDate: string,
+  fallbackDuration: number | null
+): PostViewResponse => ({
+  id: row.id,
+  post_id: row.post_id,
+  user_id: row.user_id ?? null,
+  view_duration: row.view_duration ?? fallbackDuration ?? null,
+  date_view: row.date_view ?? row.created_at ?? fallbackDate,
+});
+
+const getExistingPostView = async (
+  supabase: SupabaseClient,
+  postId: string,
+  userId: string,
+  fallbackDate: string,
+  fallbackDuration: number | null
+): Promise<PostViewResponse | null> => {
+  let { data, error } = await supabase
+    .from('post_views')
+    .select('id, post_id, user_id, view_duration, date_view, created_at')
+    .eq('post_id', postId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (
+    error &&
+    (error.message.includes('view_duration') || error.message.includes('date_view'))
+  ) {
+    const fallback = await supabase
+      .from('post_views')
+      .select('id, post_id, user_id, created_at')
+      .eq('post_id', postId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(`Failed to fetch existing post view: ${error.message}`);
+  }
+
+  return data ? mapPostViewResponse(data, fallbackDate, fallbackDuration) : null;
+};
+
 const notifyPostOwner = async (
   recipientId: string,
   payload: {
@@ -316,6 +364,20 @@ export const recordPostView = async (
       ? Math.max(0, Math.round(payload.view_duration))
       : null;
 
+  if (userId) {
+    const existingView = await getExistingPostView(
+      supabase,
+      postId,
+      userId,
+      now,
+      normalizedDuration
+    );
+
+    if (existingView) {
+      return existingView;
+    }
+  }
+
   let { data, error } = await supabase
     .from('post_views')
     .insert({
@@ -348,17 +410,29 @@ export const recordPostView = async (
     error = fallback.error;
   }
 
+  if (
+    error &&
+    userId &&
+    error.message.includes('duplicate key value violates unique constraint')
+  ) {
+    const existingView = await getExistingPostView(
+      supabase,
+      postId,
+      userId,
+      now,
+      normalizedDuration
+    );
+
+    if (existingView) {
+      return existingView;
+    }
+  }
+
   if (error) {
     throw new Error(`Failed to record post view: ${error.message}`);
   }
 
-  return {
-    id: data.id,
-    post_id: data.post_id,
-    user_id: data.user_id ?? null,
-    view_duration: data.view_duration ?? normalizedDuration ?? null,
-    date_view: data.date_view ?? data.created_at ?? now,
-  };
+  return mapPostViewResponse(data, now, normalizedDuration);
 };
 
 /**

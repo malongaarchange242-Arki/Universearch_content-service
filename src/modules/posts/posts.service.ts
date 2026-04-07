@@ -102,54 +102,58 @@ const notifyFollowers = async (
     const organizationId = entityInfo?.id || post.author_id;
     const organizationType = entityInfo?.type || normalizeEntityType(post.author_type);
     const notificationMessage = `${organizationName} a publiÃ© : "${post.titre}"`;
-
-    const promises = followerIds.map((userId) =>
-      axios
-        .post(
-          `${notificationServiceUrl}/api/notifications`,
-          {
-            user_id: userId,
-            type: 'post',
-            title: 'Nouveau post',
-            message: notificationMessage,
-            delivery_types: ['in_app', 'push'],
-            data: {
-              post_id: post.id,
-              author_id: organizationId,
-              author_type: organizationType,
-              institution_id: organizationId,
-              institution_name: organizationName,
-              institution_logo_url: entityInfo?.logo_url || null,
-              institution_description: entityInfo?.description || null,
-              titre: post.titre,
-              description: post.description,
-            },
-          },
-          {
-            timeout: 15000,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          }
-        )
-        .catch((err) => {
-          const details =
-            err?.response?.data ??
-            err?.message ??
-            err?.code ??
-            err;
-
-          console.error(
-            `Failed to send notification to user ${userId}:`,
-            details
-          );
-        })
+    const response = await axios.post(
+      `${notificationServiceUrl}/api/notifications/broadcast`,
+      {
+        user_ids: followerIds,
+        type: 'post',
+        title: 'Nouveau post',
+        message: notificationMessage,
+        delivery_types: ['in_app', 'push'],
+        data: {
+          post_id: post.id,
+          author_id: organizationId,
+          author_type: organizationType,
+          institution_id: organizationId,
+          institution_name: organizationName,
+          institution_logo_url: entityInfo?.logo_url || null,
+          institution_description: entityInfo?.description || null,
+          titre: post.titre,
+          description: post.description,
+        },
+      },
+      {
+        timeout: 20000,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
     );
 
-    await Promise.all(promises);
-    console.log(`Notifications sent to ${followerIds.length} followers`);
+    const deliveredCount =
+      typeof response.data?.count === 'number'
+        ? response.data.count
+        : followerIds.length;
+
+    const errors = Array.isArray(response.data?.errors)
+      ? response.data.errors
+      : [];
+
+    if (errors.length > 0) {
+      console.warn('Broadcast notification completed with partial errors:', errors);
+    }
+
+    console.log(
+      `Notifications queued for ${deliveredCount}/${followerIds.length} followers`
+    );
   } catch (err) {
-    console.error('Error notifying followers:', err);
+    const details =
+      (err as any)?.response?.data ??
+      (err as any)?.message ??
+      (err as any)?.code ??
+      err;
+
+    console.error('Error notifying followers:', details);
   }
 };
 
