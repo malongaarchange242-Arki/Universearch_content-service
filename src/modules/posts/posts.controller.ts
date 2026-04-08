@@ -413,7 +413,14 @@ export const createComment = async (
       return reply.status(400).send({ success: false, error: 'contenu is required' });
     }
 
-    const comment = await PostsService.createComment(supabase, user.id, request.params.id, contenu, parentCommentId);
+    const comment = await PostsService.createComment(
+      supabase,
+      user.id,
+      request.params.id,
+      contenu,
+      parentCommentId,
+      user.role
+    );
     reply.status(201).send({ success: true, data: comment });
   } catch (error) {
     request.log.error(error);

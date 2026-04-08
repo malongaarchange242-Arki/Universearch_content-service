@@ -54,6 +54,13 @@ interface BroadcastNotificationsResponse {
   errors?: unknown[];
 }
 
+interface CommentNotificationTarget {
+  userId: string;
+  type: 'comment' | 'comment_reply';
+  title: string;
+  message: string;
+}
+
 const isInstitutionAuthorType = (
   entityType: string
 ): entityType is 'universite' | 'centre_formation' | 'centre' =>
@@ -295,6 +302,117 @@ const resolveAuthorEntity = async (
   return getEntityInfo(supabase, authorId, normalizedType);
 };
 
+const normalizeInstitutionRole = (
+  role?: string | null
+): 'universite' | 'centre_formation' | null => {
+  const normalized = role?.toString().toLowerCase() || '';
+
+  if (normalized.includes('univers')) {
+    return 'universite';
+  }
+
+  if (normalized.includes('centre')) {
+    return 'centre_formation';
+  }
+
+  return null;
+};
+
+const resolveActorName = async (
+  supabase: SupabaseClient,
+  actorId: string
+): Promise<string> => {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('nom, prenom')
+      .eq('id', actorId)
+      .maybeSingle();
+
+    const fullName = [data?.prenom, data?.nom]
+      .filter((value) => value && String(value).trim().length > 0)
+      .join(' ')
+      .trim();
+
+    return fullName || data?.nom || actorId;
+  } catch (_) {
+    return actorId;
+  }
+};
+
+const resolveCommentActorEntity = async (
+  supabase: SupabaseClient,
+  actorId: string,
+  actorRole?: string | null
+): Promise<AuthorEntityInfo | null> => {
+  const normalizedRole = normalizeInstitutionRole(actorRole);
+
+  if (normalizedRole) {
+    const roleEntity = await resolveAuthorEntity(supabase, actorId, normalizedRole);
+    if (roleEntity) {
+      return roleEntity;
+    }
+  }
+
+  const universityEntity = await resolveAuthorEntity(supabase, actorId, 'universite');
+  if (universityEntity) {
+    return universityEntity;
+  }
+
+  return resolveAuthorEntity(supabase, actorId, 'centre_formation');
+};
+
+const sendCommentNotification = async (
+  target: CommentNotificationTarget,
+  payload: {
+    actorUserId: string;
+    actorRole?: string | null;
+    actorName: string;
+    actorEntity: AuthorEntityInfo | null;
+    postId: string;
+    postTitle?: string | null;
+    parentCommentId?: string | null;
+    commentPreview?: string;
+  }
+): Promise<void> => {
+  await axios.post(
+    `${process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL}/api/notifications`,
+    {
+      user_id: target.userId,
+      type: target.type,
+      title: target.title,
+      message: target.message,
+      priority: 'high',
+      delivery_types: ['in_app', 'push'],
+      data: {
+        title: target.title,
+        body: target.message,
+        type: target.type,
+        post_id: payload.postId,
+        entity_id: payload.postId,
+        actor_id: payload.actorUserId,
+        actor_name: payload.actorName,
+        actor_type: payload.actorEntity?.type || payload.actorRole || 'utilisateur',
+        author_id: payload.actorEntity?.id || payload.actorUserId,
+        author_type: payload.actorEntity?.type || payload.actorRole || 'utilisateur',
+        institution_id: payload.actorEntity?.id || null,
+        institution_name: payload.actorEntity?.name || null,
+        institution_logo_url: payload.actorEntity?.logo_url || null,
+        institution_description: payload.actorEntity?.description || null,
+        parent_comment_id: payload.parentCommentId || null,
+        post_title: payload.postTitle || '',
+        comment_preview: payload.commentPreview || '',
+      },
+    },
+    {
+      timeout: 15000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+};
+
 /**
  * CrÃƒÂ©er un post
  */
@@ -441,7 +559,8 @@ export const createComment = async (
   userId: string,
   postId: string,
   contenu: string,
-  parentCommentId?: string | null
+  parentCommentId?: string | null,
+  actorRole?: string | null
 ): Promise<any> => {
   const commentId = randomUUID();
   const now = new Date().toISOString();
@@ -489,6 +608,98 @@ export const createComment = async (
     }
     throw new Error(`Failed to create comment: ${error.message}`);
   }
+
+  void (async () => {
+    try {
+      const { data: postInfo, error: postInfoError } = await supabase
+        .from('posts')
+        .select('id, author_id, titre')
+        .eq('id', postId)
+        .maybeSingle();
+
+      if (postInfoError || !postInfo) {
+        if (postInfoError) {
+          console.error('Failed to fetch post for comment notification:', postInfoError.message);
+        }
+        return;
+      }
+
+      const actorEntity = await resolveCommentActorEntity(
+        supabase,
+        userId,
+        actorRole
+      );
+      const actorName =
+        actorEntity?.name ||
+        actorEntity?.sigle ||
+        (await resolveActorName(supabase, userId));
+      const trimmedComment = (contenu || '').trim();
+      const commentPreview =
+        trimmedComment.length > 180
+          ? `${trimmedComment.slice(0, 177)}...`
+          : trimmedComment;
+
+      const targets: CommentNotificationTarget[] = [];
+
+      if (postInfo.author_id && postInfo.author_id !== userId) {
+        targets.push({
+          userId: postInfo.author_id,
+          type: 'comment',
+          title: 'Nouveau commentaire',
+          message: `${actorName} a commente votre post${postInfo.titre ? `: "${postInfo.titre}"` : ''}`,
+        });
+      }
+
+      if (parentCommentId) {
+        const { data: parentComment, error: parentCommentError } = await supabase
+          .from('post_comments')
+          .select('id, user_id')
+          .eq('id', parentCommentId)
+          .maybeSingle();
+
+        if (parentCommentError) {
+          console.error(
+            'Failed to fetch parent comment for notification:',
+            parentCommentError.message
+          );
+        } else if (
+          parentComment?.user_id &&
+          parentComment.user_id !== userId &&
+          parentComment.user_id !== postInfo.author_id
+        ) {
+          targets.push({
+            userId: parentComment.user_id,
+            type: 'comment_reply',
+            title: 'Nouvelle reponse',
+            message: `${actorName} a repondu a votre commentaire${postInfo.titre ? ` sur "${postInfo.titre}"` : ''}`,
+          });
+        }
+      }
+
+      await Promise.all(
+        targets.map((target) =>
+          sendCommentNotification(target, {
+            actorUserId: userId,
+            actorRole,
+            actorName,
+            actorEntity,
+            postId,
+            postTitle: postInfo.titre,
+            parentCommentId,
+            commentPreview,
+          }).catch((notificationError) => {
+            const details =
+              (notificationError as any)?.response?.data ??
+              (notificationError as any)?.message ??
+              notificationError;
+            console.error('Failed to send comment notification:', details);
+          })
+        )
+      );
+    } catch (notifyError) {
+      console.error('Error in comment notification flow:', notifyError);
+    }
+  })();
 
   return data;
 };
