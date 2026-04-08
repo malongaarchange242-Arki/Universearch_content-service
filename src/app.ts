@@ -7,6 +7,7 @@ import multipart from '@fastify/multipart';
 import { postsRoutes } from './modules/posts/posts.routes';
 import { interactionsRoutes } from './modules/interactions/interactions.routes';
 import { feedRoutes } from './modules/feed/feed.routes';
+import { statsRoutes } from './modules/stats/stats.routes';
 
 /**
  * Instance principale de l'application Fastify pour le content-service
@@ -72,6 +73,7 @@ app.get('/health', async () => ({
 app.register(postsRoutes);
 app.register(interactionsRoutes);
 app.register(feedRoutes);
+app.register(statsRoutes);
 
 /**
  * Global error handler
