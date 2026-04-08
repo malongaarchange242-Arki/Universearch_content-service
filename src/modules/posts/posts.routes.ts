@@ -23,6 +23,18 @@ export const postsRoutes = async (
   );
 
   /**
+   * GET /posts/mine - Lister les posts de l'organisation authentifiée
+   * Protégé: authentifié + organisation APPROVED
+   */
+  app.get(
+    '/posts/mine',
+    {
+      preHandler: [authenticate, authorizeOrg],
+    },
+    PostsController.listPosts as any
+  );
+
+  /**
    * GET /posts/entity - Lister les posts par entité (université ou centre)
    * Public - MUST come BEFORE /posts/:id to avoid being matched by :id parameter
    */

@@ -11,7 +11,7 @@ export const getFeed = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const page = request.query.page || 1;
     const limit = request.query.limit || 10;
 
@@ -38,7 +38,7 @@ export const getUniversitesFeed = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const page = request.query.page || 1;
     const limit = request.query.limit || 10;
 
@@ -65,7 +65,7 @@ export const getCentresFeed = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const page = request.query.page || 1;
     const limit = request.query.limit || 10;
 
@@ -92,7 +92,7 @@ export const getOrganizationFeed = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const organizationId = request.query.organization_id;
     const organizationType = request.query.organization_type;
     const page = request.query.page || 1;

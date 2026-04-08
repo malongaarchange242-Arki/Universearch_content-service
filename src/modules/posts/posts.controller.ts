@@ -229,7 +229,7 @@ export const listPosts = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const user = (request.user as any) || null;
 
     // Check for query parameters: entity_id, entity_type, limit
@@ -282,7 +282,7 @@ export const getPost = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
 
     const post = await PostsService.getPost(supabase, request.params.id);
 
@@ -430,7 +430,7 @@ export const listComments = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const limit = Number((request.query as any)?.limit || 50);
     const scope = ((request.query as any)?.scope || '').toString().toLowerCase();
     let comments: any[];
@@ -474,7 +474,7 @@ export const listPostsByEntity = async (
   reply: FastifyReply
 ): Promise<void> => {
   try {
-    const supabase = (request.server as any).supabase;
+    const supabase = (request.server as any).supabaseAdmin;
     const query = request.query as any;
 
     const entityId = query?.entity_id;
