@@ -50,6 +50,13 @@ interface BroadcastNotificationsResponse {
   errors?: unknown[];
 }
 
+const isInstitutionAuthorType = (
+  entityType: string
+): entityType is 'universite' | 'centre_formation' | 'centre' =>
+  entityType === 'universite' ||
+  entityType === 'centre_formation' ||
+  entityType === 'centre';
+
 const normalizeEntityType = (
   entityType: string
 ): 'universite' | 'centre_formation' =>
@@ -274,14 +281,17 @@ export const createPost = async (
 
   // Ã°Å¸â€â€ Envoyer des notifications aux followers (asynchrone, ne pas attendre)
   try {
-    const authorEntity = await resolveAuthorEntity(supabase, authorId, authorType);
-    const followers = await getFollowers(
-      supabase,
-      authorEntity?.id || authorId,
-      authorType
-    );
-    if (followers.length > 0) {
-      await notifyFollowers(followers, createdPost, authorEntity);
+    if (isInstitutionAuthorType(authorType)) {
+      const authorEntity = await resolveAuthorEntity(supabase, authorId, authorType);
+      const followers = await getFollowers(
+        supabase,
+        authorEntity?.id || authorId,
+        authorType
+      );
+
+      if (followers.length > 0) {
+        await notifyFollowers(followers, createdPost, authorEntity);
+      }
     }
   } catch (err) {
     console.error('Error in notification flow:', err);
