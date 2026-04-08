@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS post_views (
   date_view TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
+-- Important: allow multiple views per user/post over time (cooldown-based counting).
+ALTER TABLE post_views DROP CONSTRAINT IF EXISTS unique_view;
+ALTER TABLE post_views DROP CONSTRAINT IF EXISTS post_views_post_id_user_id_key;
+DROP INDEX IF EXISTS unique_view;
+DROP INDEX IF EXISTS post_views_post_id_user_id_key;
+
 CREATE INDEX idx_post_views_post_id ON post_views(post_id);
 CREATE INDEX idx_post_views_user_id ON post_views(user_id);
 CREATE INDEX idx_post_views_date_view ON post_views(date_view DESC);

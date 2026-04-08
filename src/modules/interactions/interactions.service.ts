@@ -49,6 +49,11 @@ interface PostViewRow {
 
 const notificationServiceUrl =
   process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL;
+const parsedPostViewCooldownMs = Number(process.env.POST_VIEW_COOLDOWN_MS);
+const POST_VIEW_COOLDOWN_MS =
+  Number.isFinite(parsedPostViewCooldownMs) && parsedPostViewCooldownMs > 0
+    ? parsedPostViewCooldownMs
+    : 60_000;
 
 const mapPostViewResponse = (
   row: any,
@@ -62,7 +67,7 @@ const mapPostViewResponse = (
   date_view: row.date_view ?? row.created_at ?? fallbackDate,
 });
 
-const getExistingPostView = async (
+const getLatestPostView = async (
   supabase: SupabaseClient,
   postId: string,
   userId: string,
@@ -74,9 +79,10 @@ const getExistingPostView = async (
     .select('id, post_id, user_id, view_duration, date_view, created_at')
     .eq('post_id', postId)
     .eq('user_id', userId)
-    .maybeSingle();
+    .order('date_view', { ascending: false })
+    .limit(1);
 
-  let data = initialResult.data as PostViewRow | null;
+  let data = (initialResult.data as PostViewRow[] | null)?.[0] ?? null;
   let error = initialResult.error;
 
   if (
@@ -88,9 +94,10 @@ const getExistingPostView = async (
       .select('id, post_id, user_id, created_at')
       .eq('post_id', postId)
       .eq('user_id', userId)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-    data = fallback.data as PostViewRow | null;
+    data = (fallback.data as PostViewRow[] | null)?.[0] ?? null;
     error = fallback.error;
   }
 
@@ -99,6 +106,12 @@ const getExistingPostView = async (
   }
 
   return data ? mapPostViewResponse(data, fallbackDate, fallbackDuration) : null;
+};
+
+const isWithinViewCooldown = (dateView: string, nowMs: number): boolean => {
+  const viewedAtMs = Date.parse(dateView);
+  if (!Number.isFinite(viewedAtMs)) return false;
+  return nowMs - viewedAtMs < POST_VIEW_COOLDOWN_MS;
 };
 
 const notifyPostOwner = async (
@@ -371,13 +384,14 @@ export const recordPostView = async (
 
   const viewId = randomUUID();
   const now = new Date().toISOString();
+  const nowMs = Date.now();
   const normalizedDuration =
     typeof payload.view_duration === 'number' && Number.isFinite(payload.view_duration)
       ? Math.max(0, Math.round(payload.view_duration))
       : null;
 
   if (userId) {
-    const existingView = await getExistingPostView(
+    const latestView = await getLatestPostView(
       supabase,
       postId,
       userId,
@@ -385,8 +399,8 @@ export const recordPostView = async (
       normalizedDuration
     );
 
-    if (existingView) {
-      return existingView;
+    if (latestView && isWithinViewCooldown(latestView.date_view, nowMs)) {
+      return latestView;
     }
   }
 
@@ -430,7 +444,7 @@ export const recordPostView = async (
     userId &&
     error.message.includes('duplicate key value violates unique constraint')
   ) {
-    const existingView = await getExistingPostView(
+    const latestView = await getLatestPostView(
       supabase,
       postId,
       userId,
@@ -438,9 +452,13 @@ export const recordPostView = async (
       normalizedDuration
     );
 
-    if (existingView) {
-      return existingView;
+    if (latestView && isWithinViewCooldown(latestView.date_view, nowMs)) {
+      return latestView;
     }
+
+    throw new Error(
+      'Failed to record post view: a unique constraint on post_views blocks cooldown-based counting'
+    );
   }
 
   if (error) {
