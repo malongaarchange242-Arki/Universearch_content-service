@@ -170,6 +170,10 @@ const notifyFollowers = async (
     const notificationServiceUrl =
       process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL;
     const organizationName = entityInfo?.name || entityInfo?.sigle || post.author_id;
+    const organizationDisplayName =
+      entityInfo?.sigle?.trim() ||
+      entityInfo?.name?.trim() ||
+      organizationName;
     const organizationId = entityInfo?.id || post.author_id;
     const organizationType = entityInfo?.type || normalizeEntityType(post.author_type);
     const notificationMessage = `${organizationName} a publiÃ© : "${post.titre}"`;
@@ -179,7 +183,7 @@ const notifyFollowers = async (
         user_ids: followerIds,
         type: 'post',
         title: 'Nouveau post',
-        message: notificationMessage,
+        message: `${organizationDisplayName} a publie un nouveau post.`,
         delivery_types: ['in_app', 'push'],
         data: {
           post_id: post.id,
