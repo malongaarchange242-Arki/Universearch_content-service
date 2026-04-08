@@ -1,6 +1,6 @@
 // src/modules/feed/feed.service.ts
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient, createClient } from '@supabase/supabase-js';
 
 export interface FeedPost {
   id: string;
@@ -12,6 +12,8 @@ export interface FeedPost {
   date_creation: string;
   likes_count: number;
   comments_count: number;
+  shares_count?: number;
+  views_count?: number;
 }
 
 export interface FeedResponse {
@@ -22,6 +24,50 @@ export interface FeedResponse {
     total: number;
   };
 }
+
+const getMetricsClient = (supabase: SupabaseClient): SupabaseClient =>
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    : supabase;
+
+const enrichPostWithCounts = async (
+  supabase: SupabaseClient,
+  post: any
+): Promise<FeedPost> => {
+  const metricsClient = getMetricsClient(supabase);
+
+  const [
+    { count: likesCount },
+    { count: commentsCount },
+    { count: sharesCount },
+    { count: viewsCount },
+  ] = await Promise.all([
+    metricsClient
+      .from('post_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', post.id),
+    metricsClient
+      .from('post_comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', post.id),
+    metricsClient
+      .from('post_shares')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', post.id),
+    metricsClient
+      .from('post_views')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', post.id),
+  ]);
+
+  return {
+    ...post,
+    likes_count: likesCount || 0,
+    comments_count: commentsCount || 0,
+    shares_count: sharesCount || 0,
+    views_count: viewsCount || 0,
+  };
+};
 
 /**
  * Récupérer le feed complet (public)
@@ -46,23 +92,7 @@ export const getFeed = async (
 
   // Enrichir avec les compteurs
   const enrichedPosts = await Promise.all(
-    posts.map(async (post) => {
-      const { count: likesCount } = await supabase
-        .from('post_likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: commentsCount } = await supabase
-        .from('post_comments')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      return {
-        ...post,
-        likes_count: likesCount || 0,
-        comments_count: commentsCount || 0,
-      };
-    })
+    posts.map((post) => enrichPostWithCounts(supabase, post))
   );
 
   return {
@@ -98,23 +128,7 @@ export const getUniversitesFeed = async (
 
   // Enrichir avec les compteurs
   const enrichedPosts = await Promise.all(
-    posts.map(async (post) => {
-      const { count: likesCount } = await supabase
-        .from('post_likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: commentsCount } = await supabase
-        .from('post_comments')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      return {
-        ...post,
-        likes_count: likesCount || 0,
-        comments_count: commentsCount || 0,
-      };
-    })
+    posts.map((post) => enrichPostWithCounts(supabase, post))
   );
 
   return {
@@ -150,23 +164,7 @@ export const getCentresFeed = async (
 
   // Enrichir avec les compteurs
   const enrichedPosts = await Promise.all(
-    posts.map(async (post) => {
-      const { count: likesCount } = await supabase
-        .from('post_likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: commentsCount } = await supabase
-        .from('post_comments')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      return {
-        ...post,
-        likes_count: likesCount || 0,
-        comments_count: commentsCount || 0,
-      };
-    })
+    posts.map((post) => enrichPostWithCounts(supabase, post))
   );
 
   return {
@@ -205,23 +203,7 @@ export const getOrganizationFeed = async (
 
   // Enrichir avec les compteurs
   const enrichedPosts = await Promise.all(
-    posts.map(async (post) => {
-      const { count: likesCount } = await supabase
-        .from('post_likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: commentsCount } = await supabase
-        .from('post_comments')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      return {
-        ...post,
-        likes_count: likesCount || 0,
-        comments_count: commentsCount || 0,
-      };
-    })
+    posts.map((post) => enrichPostWithCounts(supabase, post))
   );
 
   return {

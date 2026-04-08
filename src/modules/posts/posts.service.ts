@@ -34,6 +34,10 @@ export interface PostResponse {
   media_type: string | null;
   statut: string;
   date_creation: string;
+  likes_count?: number;
+  comments_count?: number;
+  shares_count?: number;
+  views_count?: number;
 }
 
 interface AuthorEntityInfo {
@@ -61,6 +65,54 @@ const normalizeEntityType = (
   entityType: string
 ): 'universite' | 'centre_formation' =>
   entityType === 'universite' ? 'universite' : 'centre_formation';
+
+const getMetricsClient = (supabase: SupabaseClient): SupabaseClient =>
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    : supabase;
+
+const getPostCounts = async (
+  supabase: SupabaseClient,
+  postId: string
+): Promise<{
+  likes_count: number;
+  comments_count: number;
+  shares_count: number;
+  views_count: number;
+}> => {
+  const metricsClient = getMetricsClient(supabase);
+
+  const [
+    { count: likesCount },
+    { count: commentsCount },
+    { count: sharesCount },
+    { count: viewsCount },
+  ] = await Promise.all([
+    metricsClient
+      .from('post_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId),
+    metricsClient
+      .from('post_comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId),
+    metricsClient
+      .from('post_shares')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId),
+    metricsClient
+      .from('post_views')
+      .select('id', { count: 'exact', head: true })
+      .eq('post_id', postId),
+  ]);
+
+  return {
+    likes_count: likesCount || 0,
+    comments_count: commentsCount || 0,
+    shares_count: sharesCount || 0,
+    views_count: viewsCount || 0,
+  };
+};
 
 /**
  * RÃƒÂ©cupÃƒÂ©rer les followers d'une universitÃƒÂ© ou centre
@@ -331,31 +383,11 @@ export const listPosts = async (
   // Enrich posts with likes/comments/shares counts using service role to bypass RLS
   const enrichedPosts = await Promise.all(
     posts.map(async (post) => {
-      // Use service role client for counting to bypass RLS policies
-      const supabaseService = process.env.SUPABASE_SERVICE_ROLE_KEY
-        ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-        : supabase;
-
-      const { count: likesCount } = await supabaseService
-        .from('post_likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: commentsCount } = await supabaseService
-        .from('post_comments')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: sharesCount } = await supabaseService
-        .from('post_shares')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
+      const counts = await getPostCounts(supabase, post.id);
 
       return {
         ...post,
-        likes_count: likesCount || 0,
-        comments_count: commentsCount || 0,
-        shares_count: sharesCount || 0,
+        ...counts,
       } as PostResponse;
     })
   );
@@ -389,26 +421,11 @@ export const listPostsByEntity = async (
   // Enrich posts with likes and comments counts
   const enrichedPosts = await Promise.all(
     (data || []).map(async (post) => {
-      const { count: likesCount } = await supabase
-        .from('post_likes')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: commentsCount } = await supabase
-        .from('post_comments')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
-
-      const { count: sharesCount } = await supabase
-        .from('post_shares')
-        .select('id', { count: 'exact' })
-        .eq('post_id', post.id);
+      const counts = await getPostCounts(supabase, post.id);
 
       return {
         ...post,
-        likes_count: likesCount || 0,
-        comments_count: commentsCount || 0,
-        shares_count: sharesCount || 0,
+        ...counts,
       } as PostResponse;
     })
   );
