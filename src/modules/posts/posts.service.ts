@@ -935,7 +935,14 @@ const enrichCommentsWithUsers = async (supabase: SupabaseClient, comments: any[]
 export const getPost = async (
   supabase: SupabaseClient,
   postId: string
-): Promise<PostResponse & { likes_count: number; comments_count: number }> => {
+): Promise<
+  PostResponse & {
+    likes_count: number;
+    comments_count: number;
+    shares_count: number;
+    views_count: number;
+  }
+> => {
   const { data: post, error: postError } = await supabase
     .from('posts')
     .select('*')
@@ -947,20 +954,11 @@ export const getPost = async (
   }
 
   // RÃƒÂ©cupÃƒÂ©rer les compteurs (si ces tables existent)
-  const { count: likesCount } = await supabase
-    .from('post_likes')
-    .select('id', { count: 'exact' })
-    .eq('post_id', postId);
-
-  const { count: commentsCount } = await supabase
-    .from('post_comments')
-    .select('id', { count: 'exact' })
-    .eq('post_id', postId);
+  const counts = await getPostCounts(supabase, postId);
 
   return {
     ...post,
-    likes_count: likesCount || 0,
-    comments_count: commentsCount || 0,
+    ...counts,
   } as any;
 };
 

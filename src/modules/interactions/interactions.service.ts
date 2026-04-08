@@ -114,6 +114,30 @@ const isWithinViewCooldown = (dateView: string, nowMs: number): boolean => {
   return nowMs - viewedAtMs < POST_VIEW_COOLDOWN_MS;
 };
 
+const resolveViewerProfileId = async (
+  supabase: SupabaseClient,
+  userId: string | null
+): Promise<string | null> => {
+  if (!userId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn(
+      `Failed to resolve viewer profile for post view, falling back to anonymous view: ${error.message}`
+    );
+    return null;
+  }
+
+  return data?.id || null;
+};
+
 const notifyPostOwner = async (
   recipientId: string,
   payload: {
@@ -385,16 +409,17 @@ export const recordPostView = async (
   const viewId = randomUUID();
   const now = new Date().toISOString();
   const nowMs = Date.now();
+  const viewerProfileId = await resolveViewerProfileId(supabase, userId);
   const normalizedDuration =
     typeof payload.view_duration === 'number' && Number.isFinite(payload.view_duration)
       ? Math.max(0, Math.round(payload.view_duration))
       : null;
 
-  if (userId) {
+  if (viewerProfileId) {
     const latestView = await getLatestPostView(
       supabase,
       postId,
-      userId,
+      viewerProfileId,
       now,
       normalizedDuration
     );
@@ -409,7 +434,7 @@ export const recordPostView = async (
     .insert({
       id: viewId,
       post_id: postId,
-      user_id: userId,
+      user_id: viewerProfileId,
       view_duration: normalizedDuration,
       date_view: now,
     })
@@ -429,7 +454,7 @@ export const recordPostView = async (
       .insert({
         id: viewId,
         post_id: postId,
-        user_id: userId,
+        user_id: viewerProfileId,
         created_at: now,
       })
       .select()
@@ -441,13 +466,13 @@ export const recordPostView = async (
 
   if (
     error &&
-    userId &&
+    viewerProfileId &&
     error.message.includes('duplicate key value violates unique constraint')
   ) {
     const latestView = await getLatestPostView(
       supabase,
       postId,
-      userId,
+      viewerProfileId,
       now,
       normalizedDuration
     );
