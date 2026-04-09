@@ -182,9 +182,17 @@ export const recordView = async (
       request.body || {}
     );
 
+    const latestViews = await InteractionsService.getPostViews(
+      supabase,
+      request.params.id,
+      1,
+      1
+    );
+
     reply.status(201).send({
       success: true,
       data: view,
+      views_count: latestViews.total,
     });
   } catch (error) {
     request.log.error(error);
