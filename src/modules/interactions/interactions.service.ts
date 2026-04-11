@@ -186,6 +186,62 @@ const notifyPostOwner = async (
     });
 };
 
+/**
+ * 🔥 SYNC AUTOMATIQUE: Engagement → Tables PORA
+ * Appelé après chaque like/comment/view pour alimenter engagements_universites/centres
+ * 
+ * Fire-and-forget (async, pas d'await)
+ */
+const syncEngagementToPoraTable = async (
+  supabase: SupabaseClient,
+  postId: string,
+  userId: string,
+  engagementType: 'like' | 'comment' | 'view'
+): Promise<void> => {
+  try {
+    // 1️⃣ Récupérer le post
+    const { data: post, error: postError } = await supabase
+      .from('posts')
+      .select('author_id, author_type')
+      .eq('id', postId)
+      .single();
+
+    if (postError || !post) {
+      console.warn(`[PORA Sync] Post ${postId} not found`);
+      return;
+    }
+
+    const { author_id: authorId, author_type: authorType } = post;
+
+    // 2️⃣ Déterminer la table PORA cible
+    const tableName = authorType === 'universite' 
+      ? 'engagements_universites' 
+      : 'engagements_centres_formation';
+
+    // 3️⃣ Insérer l'engagement PORA
+    const { error: syncError } = await supabase
+      .from(tableName)
+      .insert({
+        id: randomUUID(),
+        [authorType === 'universite' ? 'universite_id' : 'centre_id']: authorId,
+        type: engagementType,
+        user_id: userId,
+        post_id: postId,
+        date: new Date().toISOString(),
+      });
+
+    if (syncError) {
+      // ⚠️ Warn but don't crash - les tables PORA peuvent ne pas exister
+      console.warn(`[PORA Sync] Failed to sync to ${tableName}: ${syncError.message}`);
+    } else {
+      console.log(`[PORA Sync] ✅ ${engagementType} synced to ${tableName} for ${authorId}`);
+    }
+  } catch (err) {
+    // 🔴 Erreur fatale - log uniquement
+    console.error('[PORA Sync] Unexpected error:', err instanceof Error ? err.message : err);
+  }
+};
+
 export const isPostLikedByUser = async (
   supabase: SupabaseClient,
   postId: string,
@@ -252,6 +308,10 @@ export const likePost = async (
     throw new Error(`Failed to like post: ${error.message}`);
   }
 
+  // 🔥 Sync événementiel vers PORA
+  void syncEngagementToPoraTable(supabase, postId, userId, 'like');
+  
+  // 📢 Notifier le propriétaire
   void notifyPostOwner(post.author_id, {
     type: 'like',
     actorId: userId,
@@ -341,6 +401,10 @@ export const commentPost = async (
     throw new Error(`Failed to comment post: ${error.message}`);
   }
 
+  // 🔥 Sync événementiel vers PORA
+  void syncEngagementToPoraTable(supabase, postId, userId, 'comment');
+  
+  // 📢 Notifier le propriétaire
   void notifyPostOwner(post.author_id, {
     type: 'comment',
     actorId: userId,
@@ -488,6 +552,11 @@ export const recordPostView = async (
 
   if (error) {
     throw new Error(`Failed to record post view: ${error.message}`);
+  }
+
+  // 🔥 Sync événementiel vers PORA (seulement si userId existe)
+  if (viewerProfileId) {
+    void syncEngagementToPoraTable(supabase, postId, viewerProfileId, 'view');
   }
 
   return mapPostViewResponse(data as PostViewRow, now, normalizedDuration);
