@@ -5,6 +5,11 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import * as PostsService from './posts.service';
 import { resolveAuthenticatedUser } from '../../middleware/authenticate';
+import { MediaService } from '../media/media.service';
+import {
+  addVideoProcessingJob,
+  getVideoProcessingJobStatus,
+} from '../../queues/videoProcessing.queue';
 
 /**
  * Créer un post
@@ -26,13 +31,19 @@ export const createPost = async (
     const titre = body.titre || body.title || '';
     const description = body.description || body.content || body.desc || null;
     const media_url = body.media_url || body.mediaUrl || null;
+    const thumbnail_url = body.thumbnail_url || body.thumbnailUrl || null;
     const media_type = body.media_type || body.mediaType || null;
+    const media_processing_status = body.media_processing_status || body.mediaProcessingStatus || null;
+    const media_processing_error = body.media_processing_error || body.mediaProcessingError || null;
 
     const payload: PostsService.CreatePostPayload = {
       titre: titre,
       description: description,
       media_url: media_url,
+      thumbnail_url: thumbnail_url,
       media_type: media_type,
+      media_processing_status,
+      media_processing_error,
     };
 
     const post = await PostsService.createPost(
@@ -184,6 +195,94 @@ export const uploadFile = async (
 
     request.log.info({ msg: 'Received file metadata', filename: resolvedFile.filename || resolvedFile.name, mimetype: resolvedFile.mimetype || resolvedFile.type });
     const isVideo = (resolvedFile.mimetype || resolvedFile.type || '').toString().startsWith('video/');
+
+    if (isVideo) {
+      const mediaService = new MediaService(supabase);
+      const query = request.query as any;
+      const asyncMode =
+        query?.async === 'true' ||
+        query?.async === '1' ||
+        request.headers['x-video-processing'] === 'async';
+      const ownerId = (request.user as any)?.id || 'unknown';
+      const postId = query?.post_id || query?.postId || null;
+      const priority = query?.priority ? Number(query.priority) : undefined;
+
+      if (asyncMode) {
+        const raw = await mediaService.uploadRawVideo(
+          buffer,
+          resolvedFile.filename || resolvedFile.name || 'upload.video',
+          ownerId,
+          resolvedFile.mimetype || resolvedFile.type || 'application/octet-stream'
+        );
+
+        const job = await addVideoProcessingJob(
+          {
+            source: 'content',
+            rawBucket: raw.bucket,
+            outputBucket: 'videos',
+            outputPrefix: 'posts',
+            thumbnailPrefix: 'thumbnails/posts',
+            rawPath: raw.path,
+            rawUrl: raw.rawUrl,
+            originalFilename: resolvedFile.filename || resolvedFile.name || 'upload.video',
+            ownerId,
+            postId: postId || null,
+          },
+          { priority: Number.isFinite(priority) ? priority : 5 }
+        );
+
+        if (postId) {
+          await supabase
+            .from('posts')
+            .update({
+              media_processing_status: 'queued',
+              media_processing_error: null,
+            })
+            .eq('id', postId)
+            .eq('author_id', ownerId);
+        }
+
+        reply.header('Access-Control-Allow-Origin', '*');
+        reply.header('Access-Control-Allow-Headers', 'Range, Content-Type');
+        reply.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+
+        return reply.code(202).send({
+          success: true,
+          status: 'processing',
+          placeholder: true,
+          jobId: job.id,
+          rawUrl: raw.rawUrl,
+          bucket: raw.bucket,
+          path: raw.path,
+          postId,
+          media_type: 'video',
+        });
+      }
+
+      const processed = await mediaService.processAndUploadVideo(
+        buffer,
+        resolvedFile.filename || resolvedFile.name || 'upload.video',
+        ownerId
+      );
+
+      request.log.info({ msg: 'Video normalized and uploaded with ffmpeg', url: processed.url, bucket: processed.bucket, path: processed.path });
+
+      reply.header('Access-Control-Allow-Origin', '*');
+      reply.header('Access-Control-Allow-Headers', 'Range, Content-Type');
+      reply.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+
+      return reply.code(201).send({
+        success: true,
+        url: processed.url,
+        videoUrl: processed.url,
+        thumbnailUrl: processed.thumbnailUrl,
+        bucket: processed.bucket,
+        path: processed.path,
+        thumbnailPath: processed.thumbnailPath,
+        media_type: 'video',
+      });
+    }
+
     const bucket = isVideo ? 'videos' : 'images';
     const ext = (resolvedFile.filename || resolvedFile.name || 'bin').split('.').pop() || 'bin';
     const uuid = randomUUID();
@@ -219,6 +318,25 @@ export const uploadFile = async (
     request.log.error(error);
     reply.status(400).send({ success: false, error: (error as Error).message });
   }
+};
+
+export const getUploadJob = async (
+  request: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  const job = await getVideoProcessingJobStatus(request.params.id);
+
+  if (!job) {
+    return reply.status(404).send({
+      success: false,
+      error: 'Upload job not found',
+    });
+  }
+
+  reply.send({
+    success: true,
+    data: job,
+  });
 };
 
 /**

@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+RUN apk add --no-cache ffmpeg
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
+
 # Copy package files
 COPY package*.json ./
 

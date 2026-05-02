@@ -6,10 +6,33 @@ export const createPostSchema = {
     required: ['titre'],
     properties: {
       titre: { type: 'string', minLength: 1, maxLength: 500 },
-      description: { type: ['string', 'null'], minLength: 0, maxLength: 5000, description: 'Description du post (optionnel)' },
-      media_url: { type: ['string', 'null'], description: 'URL du média (si disponible)' },
-      media_type: { type: ['string', 'null'], enum: ['image', 'video'], description: 'Type de média' }
-    }
+      description: {
+        type: ['string', 'null'],
+        minLength: 0,
+        maxLength: 5000,
+        description: 'Description du post (optionnel)',
+      },
+      media_url: {
+        type: ['string', 'null'],
+        description: 'URL du media (si disponible)',
+      },
+      thumbnail_url: {
+        type: ['string', 'null'],
+        description: 'URL de la miniature video (si disponible)',
+      },
+      media_type: {
+        type: ['string', 'null'],
+        enum: ['image', 'video'],
+        description: 'Type de media',
+      },
+      media_processing_status: {
+        type: ['string', 'null'],
+        enum: ['queued', 'processing', 'completed', 'failed'],
+      },
+      media_processing_error: {
+        type: ['string', 'null'],
+      },
+    },
   },
   response: {
     201: {
@@ -26,14 +49,17 @@ export const createPostSchema = {
             description: { type: ['string', 'null'] },
             contenu: { type: 'string' },
             media_url: { type: ['string', 'null'] },
+            thumbnail_url: { type: ['string', 'null'] },
             media_type: { type: ['string', 'null'] },
+            media_processing_status: { type: ['string', 'null'] },
+            media_processing_error: { type: ['string', 'null'] },
             statut: { type: 'string' },
-            date_creation: { type: 'string' }
-          }
-        }
-      }
-    }
-  }
+            date_creation: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
 };
 
 export const updatePostSchema = {
@@ -43,18 +69,29 @@ export const updatePostSchema = {
       description: {
         type: 'string',
         minLength: 1,
-        maxLength: 5000
+        maxLength: 5000,
       },
       media_url: {
         type: 'string',
-        format: 'uri'
+        format: 'uri',
+      },
+      thumbnail_url: {
+        type: 'string',
+        format: 'uri',
       },
       media_type: {
         type: 'string',
-        enum: ['image', 'video']
-      }
-    }
-  }
+        enum: ['image', 'video'],
+      },
+      media_processing_status: {
+        type: 'string',
+        enum: ['queued', 'processing', 'completed', 'failed'],
+      },
+      media_processing_error: {
+        type: 'string',
+      },
+    },
+  },
 };
 
 export const createCommentSchema = {
@@ -63,7 +100,10 @@ export const createCommentSchema = {
     required: ['contenu'],
     properties: {
       contenu: { type: 'string', minLength: 1, maxLength: 2000 },
-      parent_comment_id: { type: ['string', 'null'], description: 'ID du commentaire parent (pour les réponses)' }
-    }
-  }
+      parent_comment_id: {
+        type: ['string', 'null'],
+        description: 'ID du commentaire parent (pour les reponses)',
+      },
+    },
+  },
 };

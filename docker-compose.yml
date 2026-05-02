@@ -13,8 +13,36 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - LOG_LEVEL=info
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+
     depends_on:
       - identity-service
+      - redis   # 🔥 AJOUT
+
+    networks:
+      - universearch
+
+  content-video-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run worker:video
+    environment:
+      - NODE_ENV=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    networks:
+      - universearch
+
+  # 🔥 AJOUT REDIS
+  redis:
+    image: redis:7
+    container_name: universearch-redis
+    ports:
+      - "6379:6379"
     networks:
       - universearch
 

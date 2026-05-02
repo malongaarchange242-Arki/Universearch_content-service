@@ -4,6 +4,7 @@ import { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import * as PostsController from './posts.controller';
 import { createPostSchema, updatePostSchema, createCommentSchema } from './posts.schema';
 import { authenticate, authorizeOrg } from '../../middleware';
+import { uploadRateLimit } from '../../middleware/uploadRateLimit';
 
 export const postsRoutes = async (
   app: FastifyInstance,
@@ -29,7 +30,7 @@ export const postsRoutes = async (
   app.get(
     '/posts/mine',
     {
-      preHandler: [authenticate, authorizeOrg],
+      preHandler: [authenticate, authorizeOrg, uploadRateLimit],
     },
     PostsController.listPosts as any
   );
@@ -62,6 +63,14 @@ export const postsRoutes = async (
       preHandler: [authenticate, authorizeOrg],
     },
     PostsController.uploadFile as any
+  );
+
+  app.get(
+    '/uploads/jobs/:id',
+    {
+      preHandler: [authenticate, authorizeOrg],
+    },
+    PostsController.getUploadJob as any
   );
 
   /**

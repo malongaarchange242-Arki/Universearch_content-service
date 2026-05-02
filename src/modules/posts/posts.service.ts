@@ -12,14 +12,20 @@ export interface CreatePostPayload {
   description?: string | null;
   // 'contenu' removed: use 'description' field instead
   media_url?: string | null;
+  thumbnail_url?: string | null;
   media_type?: 'image' | 'video' | null;
+  media_processing_status?: 'queued' | 'processing' | 'completed' | 'failed' | null;
+  media_processing_error?: string | null;
 }
 
 export interface UpdatePostPayload {
   titre?: string;
   description?: string | null;
   media_url?: string | null;
+  thumbnail_url?: string | null;
   media_type?: 'image' | 'video' | null;
+  media_processing_status?: 'queued' | 'processing' | 'completed' | 'failed' | null;
+  media_processing_error?: string | null;
   statut?: string;
 }
 
@@ -31,7 +37,10 @@ export interface PostResponse {
   description: string | null;
   contenu: string;
   media_url: string | null;
+  thumbnail_url?: string | null;
   media_type: string | null;
+  media_processing_status?: string | null;
+  media_processing_error?: string | null;
   statut: string;
   date_creation: string;
   likes_count?: number;
@@ -436,7 +445,10 @@ export const createPost = async (
     titre: payload.titre,
     description: payload.description || null,
     media_url: payload.media_url || null,
+    thumbnail_url: payload.thumbnail_url || null,
     media_type: payload.media_type || null,
+    media_processing_status: payload.media_processing_status || null,
+    media_processing_error: payload.media_processing_error || null,
     statut: 'PUBLISHED',
     date_creation: now,
   };

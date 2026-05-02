@@ -10,7 +10,13 @@ CREATE TABLE IF NOT EXISTS posts (
   description TEXT,
   contenu TEXT,
   media_url TEXT,
+  thumbnail_url TEXT,
   media_type TEXT CHECK (media_type IS NULL OR media_type IN ('image', 'video')),
+  media_processing_status TEXT CHECK (
+    media_processing_status IS NULL OR
+    media_processing_status IN ('queued', 'processing', 'completed', 'failed')
+  ),
+  media_processing_error TEXT,
   statut TEXT DEFAULT 'PUBLISHED' CHECK (statut IN ('PUBLISHED', 'DRAFT', 'ARCHIVED')),
   date_creation TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -28,6 +34,10 @@ CREATE INDEX idx_posts_org_type ON posts(org_type);
 CREATE INDEX idx_posts_date_creation ON posts(date_creation DESC);
 CREATE INDEX idx_posts_created_at ON posts(created_at DESC);
 CREATE INDEX idx_posts_statut ON posts(statut);
+
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_processing_status TEXT;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_processing_error TEXT;
 
 -- Table: post_likes
 CREATE TABLE IF NOT EXISTS post_likes (
