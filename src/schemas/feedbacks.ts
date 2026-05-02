@@ -10,8 +10,8 @@ export const createFeedbackSchema = z.object({
 });
 
 export const getFeedbacksQuerySchema = z.object({
-  limit: z.string().transform(Number).optional().default(10),
-  offset: z.string().transform(Number).optional().default(0),
+  limit: z.coerce.number().optional().default(10),
+  offset: z.coerce.number().optional().default(0),
   type: z.enum(['bug', 'suggestion', 'review']).optional(),
   status: z.enum(['pending', 'reviewed', 'resolved']).optional(),
   page: z.enum(['feed', 'universite', 'quiz', 'messages']).optional(),
