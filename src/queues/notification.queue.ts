@@ -32,7 +32,5 @@ export const notificationQueue = new Queue<NotificationJobData, void>(
 );
 
 export const addNotificationJob = async (data: NotificationJobData) => {
-  return notificationQueue.add('notify-followers', data, {
-    jobId: `notify-followers:${data.postId}`,
-  });
+  return notificationQueue.add('notify-followers', data);
 };
