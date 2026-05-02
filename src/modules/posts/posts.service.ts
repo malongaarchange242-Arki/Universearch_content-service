@@ -3,6 +3,7 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
+import { addNotificationJob } from '../../queues/notification.queue';
 
 const DEFAULT_NOTIFICATION_SERVICE_URL =
   'https://universearch-notification-service.onrender.com';
@@ -465,23 +466,18 @@ export const createPost = async (
 
   const createdPost = data as PostResponse;
 
-  // Ã°Å¸â€â€ Envoyer des notifications aux followers (asynchrone, ne pas attendre)
+  // 🚀 Queue follower notifications to run in background
   try {
     if (isInstitutionAuthorType(authorType)) {
-      const authorEntity = await resolveAuthorEntity(supabase, authorId, authorType);
-      const followers = await getFollowers(
-        supabase,
-        authorEntity?.id || authorId,
-        authorType
-      );
-
-      if (followers.length > 0) {
-        await notifyFollowers(followers, createdPost, authorEntity);
-      }
+      await addNotificationJob({
+        postId: createdPost.id,
+        authorId,
+        authorType,
+      });
     }
   } catch (err) {
-    console.error('Error in notification flow:', err);
-    // Continue mÃƒÂªme si les notifications ÃƒÂ©chouent
+    console.error('Failed to enqueue notification job:', err);
+    // Continue even if queue enqueue fails
   }
 
   return createdPost;

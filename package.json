@@ -8,7 +8,9 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "worker:video": "node dist/workers/videoProcessing.worker.js",
-    "dev:worker:video": "ts-node src/workers/videoProcessing.worker.ts"
+    "dev:worker:video": "ts-node src/workers/videoProcessing.worker.ts",
+    "worker:notification": "node dist/workers/notification.worker.js",
+    "dev:worker:notification": "ts-node src/workers/notification.worker.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
