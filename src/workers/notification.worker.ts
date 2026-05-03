@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import http from 'http';
 import { createClient } from '@supabase/supabase-js';
 import axios from 'axios';
 import { Job, Worker } from 'bullmq';
@@ -233,3 +234,12 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 console.log(`Notification worker started for queue "${NOTIFICATION_QUEUE}" with concurrency ${defaultConcurrency}`);
+
+// HTTP server for Render health checks
+const port = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Notification Worker is running');
+}).listen(port, () => {
+  console.log(`HTTP server running on port ${port}`);
+});
