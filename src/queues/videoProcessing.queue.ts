@@ -43,10 +43,14 @@ export interface VideoProcessingResult {
 
 // Configure Redis connection
 // Priority: REDIS_URL (Render) > Individual host/port > localhost default
-const redisUrl = process.env.REDIS_URL || 
+const redisUrl = process.env.REDIS_URL ||
   `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || '6379'}`;
 
-console.log('🔴 REDIS_URL =', redisUrl);
+console.log('🔴 REDIS CONFIG DEBUG:');
+console.log('  REDIS_URL env var:', process.env.REDIS_URL ? '✅ defined' : '❌ undefined');
+console.log('  REDIS_HOST env var:', process.env.REDIS_HOST ? '✅ defined' : '❌ undefined');
+console.log('  REDIS_PORT env var:', process.env.REDIS_PORT ? '✅ defined' : '❌ undefined');
+console.log('  Final redisUrl:', redisUrl);
 
 export const redisConnection = new IORedis(redisUrl, {
   maxRetriesPerRequest: null,
