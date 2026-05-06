@@ -16,6 +16,18 @@ const feedbacksRoutes: FastifyPluginAsync = async (fastify) => {
     const userId = request.userId;
 
     try {
+      // Verify user exists before inserting feedback
+      const { data: userExists, error: userError } = await fastify.supabaseAdmin
+        .from('utilisateurs')
+        .select('id')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !userExists) {
+        fastify.log.warn({ userId, error: userError }, 'User not found for feedback');
+        return reply.code(404).send({ success: false, error: 'User not found' });
+      }
+
       const { data, error } = await fastify.supabaseAdmin
         .from('feedbacks')
         .insert({
