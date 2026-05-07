@@ -55,7 +55,7 @@ export const app: FastifyInstance = Fastify({
 app.register(supabasePlugin as any);
 // multipart for file uploads
 app.register(multipart as any, {
-  attachFieldsToBody: true,
+  attachFieldsToBody: false,
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB max per file
   },

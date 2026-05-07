@@ -3,7 +3,6 @@
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
-import { addNotificationJob } from '../../queues/notification.queue';
 
 const DEFAULT_NOTIFICATION_SERVICE_URL =
   'https://universearch-notification-service.onrender.com';
@@ -466,18 +465,32 @@ export const createPost = async (
 
   const createdPost = data as PostResponse;
 
-  // 🚀 Queue follower notifications to run in background
+  // 🚀 Trigger follower notifications via notification service
   try {
     if (isInstitutionAuthorType(authorType)) {
-      await addNotificationJob({
-        postId: createdPost.id,
-        authorId,
-        authorType,
-      });
+      const followerIds = await getFollowers(supabase, authorId, authorType);
+      if (followerIds.length > 0) {
+        const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4000';
+        const response = await axios.post(`${notificationServiceUrl}/api/notifications/broadcast`, {
+          type: 'new_post',
+          title: 'Nouveau post',
+          message: `Nouvelle publication de ${authorType}`,
+          data: {
+            post_id: createdPost.id,
+            author_id: authorId,
+            author_type: authorType,
+          },
+          user_ids: followerIds,
+        });
+
+        console.log('Notifications triggered for', followerIds.length, 'followers:', response.data);
+      } else {
+        console.log('No followers to notify for', authorType, authorId);
+      }
     }
   } catch (err) {
-    console.error('Failed to enqueue notification job:', err);
-    // Continue even if queue enqueue fails
+    console.error('Failed to trigger notifications:', err);
+    // Continue even if notification trigger fails
   }
 
   return createdPost;
