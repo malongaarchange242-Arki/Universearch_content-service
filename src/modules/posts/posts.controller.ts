@@ -85,116 +85,47 @@ export const uploadFile = async (
       return reply.status(400).send({ success: false, error: 'Invalid Content-Type: expected multipart/form-data' });
     }
 
-    // fastify-multipart exposes file via request.file()
-    const mp: any = request as any;
-    const file = await mp.file().catch((e: any) => {
-      request.log.error({ msg: 'Failed to read multipart file', error: e });
-      return null;
-    });
+    // fastify-multipart with attachFieldsToBody: true exposes files in request.body
+    const bodyAny: any = (request as any).body || {};
+    let file = bodyAny.file;
 
     if (!file) {
-      request.log.warn({ msg: 'No file part found in multipart payload, checking body fallback' });
-      const bodyAny: any = (request as any).body || {};
-      // If client sent a JSON body with base64 content or attachFieldsToBody placed a file-like object
-      if (bodyAny && bodyAny.file) {
-        request.log.info({ msg: 'Found file in request.body, attempting to handle fallback', bodyKeys: Object.keys(bodyAny) });
-        const candidate = bodyAny.file;
-        // 1) If client sent base64 string + filename
-        if (typeof candidate === 'string' && bodyAny.filename) {
-          const buf = Buffer.from(candidate, 'base64');
-          (request as any).__fallbackFile = {
-            toBuffer: async () => buf,
-            filename: bodyAny.filename,
-            mimetype: bodyAny.contentType || bodyAny.content_type || 'application/octet-stream',
-          };
-        } else if (Buffer.isBuffer(candidate)) {
-          // 2) Direct Buffer
-          request.log.info({ msg: 'request.body.file is a Buffer' });
-          (request as any).__fallbackFile = {
-            toBuffer: async () => candidate,
-            filename: bodyAny.filename || `upload_${Date.now()}`,
-            mimetype: bodyAny.contentType || 'application/octet-stream',
-          };
-        } else if (candidate && typeof candidate === 'object') {
-          // 3) Object shape (fastify attachFieldsToBody sometimes places file-like object)
-          const keys = Object.keys(candidate);
-          request.log.info({ msg: 'request.body.file keys', keys });
-          // Common buffers may be under ._buf, .buffer, .data or as Uint8Array
-          const maybeBuf = (candidate as any)._buf || (candidate as any).buffer || (candidate as any).data || null;
-          if (maybeBuf && (Buffer.isBuffer(maybeBuf) || maybeBuf instanceof Uint8Array)) {
-            const buf = Buffer.isBuffer(maybeBuf) ? maybeBuf : Buffer.from(maybeBuf);
-            (request as any).__fallbackFile = {
-              toBuffer: async () => buf,
-              filename: bodyAny.filename || (candidate as any).filename || `upload_${Date.now()}`,
-              mimetype: bodyAny.contentType || (candidate as any).mimetype || 'application/octet-stream',
-            };
-          }
-        }
-      }
-
-      const fallbackFile = (request as any).__fallbackFile || null;
-      if (!fallbackFile) {
-        return reply.status(400).send({ success: false, error: 'No file provided in multipart/form-data (field name: file)' });
-      }
-
-      // use fallbackFile as file
-      (mp as any)._file = fallbackFile;
-      // normalize for logging
-      request.log.info({ msg: 'Using fallback file', filename: fallbackFile.filename, mimetype: fallbackFile.mimetype });
-      // set file variable to fallback
-      (mp as any).file = async () => fallbackFile;
-    }
-    let fileResolved = await mp.file().catch((e: any) => {
-      request.log.error({ msg: 'Error while resolving file', error: e });
-      return null;
-    });
-
-    // If mp.file() didn't return a file, try iterating parts to diagnose and recover
-    if (!fileResolved) {
-      try {
-        request.log.info({ msg: 'mp.file() returned null — iterating mp.parts() to find file parts' });
-        const parts = mp.parts ? mp.parts() : null;
-        if (parts) {
-          for await (const part of parts) {
-            request.log.info({ msg: 'Found multipart part', field: part.fieldname, filename: part.filename, mime: part.mimetype });
-            // If this part looks like a file, buffer it and use as resolved file
-            if (part && (part.filename || part.mimetype)) {
-              const buf = await part.toBuffer().catch((e: any) => {
-                request.log.error({ msg: 'Failed to buffer part', error: e });
-                return null;
-              });
-              if (buf) {
-                fileResolved = {
-                  toBuffer: async () => buf,
-                  filename: part.filename || 'upload.bin',
-                  mimetype: part.mimetype || 'application/octet-stream',
-                } as any;
-                request.log.info({ msg: 'Recovered file from parts()', filename: fileResolved.filename, mimetype: fileResolved.mimetype });
-                break;
-              }
-            }
-          }
-        } else {
-          request.log.info({ msg: 'mp.parts() not available on this multipart instance' });
-        }
-      } catch (e) {
-        request.log.error({ msg: 'Error while iterating multipart parts', error: e });
-      }
+      request.log.warn({ msg: 'No file field found in request.body' });
+      return reply.status(400).send({ success: false, error: 'No file provided in multipart/form-data (field name: file)' });
     }
 
-    const buffer = await (fileResolved ? fileResolved.toBuffer().catch((e: any) => {
-      request.log.error({ msg: 'Failed to buffer uploaded file', error: e });
-      return null;
-    }) : null);
+    // Handle the file object (could be UploadFile or similar)
+    let buffer: Buffer | null = null;
+    try {
+      if (typeof file.toBuffer === 'function') {
+        buffer = await file.toBuffer();
+      } else if (Buffer.isBuffer(file)) {
+        buffer = file;
+      } else if (file._buf && Buffer.isBuffer(file._buf)) {
+        buffer = file._buf;
+      } else if (file.buffer && Buffer.isBuffer(file.buffer)) {
+        buffer = file.buffer;
+      } else {
+        request.log.error({ msg: 'Unsupported file object type', fileKeys: Object.keys(file) });
+        return reply.status(400).send({ success: false, error: 'Unsupported file format' });
+      }
+    } catch (e) {
+      request.log.error({ msg: 'Failed to read file buffer', error: e });
+      return reply.status(500).send({ success: false, error: 'Failed to read uploaded file content' });
+    }
 
     if (!buffer) {
       return reply.status(500).send({ success: false, error: 'Failed to read uploaded file content' });
     }
 
-    const resolvedFile = fileResolved;
+    const resolvedFile = {
+      filename: file.filename || file.name || `upload_${Date.now()}`,
+      mimetype: file.mimetype || file.type || 'application/octet-stream',
+    };
 
-    request.log.info({ msg: 'Received file metadata', filename: resolvedFile.filename || resolvedFile.name, mimetype: resolvedFile.mimetype || resolvedFile.type });
-    const isVideo = (resolvedFile.mimetype || resolvedFile.type || '').toString().startsWith('video/');
+    request.log.info({ msg: 'Received file metadata', filename: resolvedFile.filename, mimetype: resolvedFile.mimetype });
+
+    const isVideo = resolvedFile.mimetype.toString().startsWith('video/');
 
     if (isVideo) {
       const mediaService = new MediaService(supabase);
@@ -210,9 +141,9 @@ export const uploadFile = async (
       if (asyncMode) {
         const raw = await mediaService.uploadRawVideo(
           buffer,
-          resolvedFile.filename || resolvedFile.name || 'upload.video',
+          resolvedFile.filename || 'upload.video',
           ownerId,
-          resolvedFile.mimetype || resolvedFile.type || 'application/octet-stream'
+          resolvedFile.mimetype || 'application/octet-stream'
         );
 
         const job = await addVideoProcessingJob(
@@ -224,7 +155,7 @@ export const uploadFile = async (
             thumbnailPrefix: 'thumbnails/posts',
             rawPath: raw.path,
             rawUrl: raw.rawUrl,
-            originalFilename: resolvedFile.filename || resolvedFile.name || 'upload.video',
+            originalFilename: resolvedFile.filename || 'upload.video',
             ownerId,
             postId: postId || null,
           },
@@ -261,7 +192,7 @@ export const uploadFile = async (
 
       const processed = await mediaService.processAndUploadVideo(
         buffer,
-        resolvedFile.filename || resolvedFile.name || 'upload.video',
+        resolvedFile.filename || 'upload.video',
         ownerId
       );
 
@@ -284,11 +215,11 @@ export const uploadFile = async (
     }
 
     const bucket = isVideo ? 'videos' : 'images';
-    const ext = (resolvedFile.filename || resolvedFile.name || 'bin').split('.').pop() || 'bin';
+    const ext = (resolvedFile.filename || 'bin').split('.').pop() || 'bin';
     const uuid = randomUUID();
     const filePath = `posts/${uuid}.${ext}`;
 
-    const { data: uploadData, error: uploadError } = await supabase.storage.from(bucket).upload(filePath, buffer, { contentType: resolvedFile.mimetype || resolvedFile.type, upsert: false });
+    const { data: uploadData, error: uploadError } = await supabase.storage.from(bucket).upload(filePath, buffer, { contentType: resolvedFile.mimetype, upsert: false });
     if (uploadError) {
       request.log.error({ msg: 'Upload error', error: uploadError });
       return reply.status(500).send({ success: false, error: uploadError.message || 'Storage upload failed' });
