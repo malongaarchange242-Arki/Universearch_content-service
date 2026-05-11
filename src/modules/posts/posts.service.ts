@@ -470,18 +470,36 @@ export const createPost = async (
     if (isInstitutionAuthorType(authorType)) {
       const followerIds = await getFollowers(supabase, authorId, authorType);
       if (followerIds.length > 0) {
-        const notificationServiceUrl = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4000';
-        const response = await axios.post(`${notificationServiceUrl}/api/notifications/broadcast`, {
-          type: 'new_post',
-          title: 'Nouveau post',
-          message: `Nouvelle publication de ${authorType}`,
-          data: {
-            post_id: createdPost.id,
-            author_id: authorId,
-            author_type: authorType,
-          },
-          user_ids: followerIds,
-        });
+        const entityInfo = await getEntityInfo(supabase, authorId, authorType);
+
+        const institutionName =
+          entityInfo?.sigle ||
+          entityInfo?.name ||
+          'Institution';
+
+        const notificationServiceUrl =
+          process.env.NOTIFICATION_SERVICE_URL ||
+          DEFAULT_NOTIFICATION_SERVICE_URL;
+
+        const response = await axios.post(
+          `${notificationServiceUrl}/api/notifications/broadcast`,
+          {
+            type: 'new_post',
+            title: 'Nouveau post',
+            message: `${institutionName} a publié un nouveau post`,
+            data: {
+              post_id: createdPost.id,
+              author_id: authorId,
+              author_type: authorType,
+              institution_id: entityInfo?.id,
+              institution_name: entityInfo?.name,
+              institution_sigle: entityInfo?.sigle,
+              institution_logo_url: entityInfo?.logo_url,
+              institution_description: entityInfo?.description,
+            },
+            user_ids: followerIds,
+          }
+        );
 
         console.log('Notifications triggered for', followerIds.length, 'followers:', response.data);
       } else {
