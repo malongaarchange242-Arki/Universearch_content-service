@@ -60,13 +60,13 @@ const processVideoJob = async (
 
   // Validation FFmpeg input
   await new Promise<void>((resolve, reject) => {
-    ffmpeg.ffprobe(job.data.rawPath, (err, metadata) => {
+    ffmpeg.ffprobe(job.data.rawPath, (err: Error | null, metadata: any) => {
       if (err) {
         reject(new Error(`FFmpeg validation failed: ${err.message}`));
         return;
       }
 
-      const videoStream = metadata.streams.find(s => s.codec_type === 'video');
+      const videoStream = metadata.streams.find((s: any) => s.codec_type === 'video');
       if (!videoStream) {
         reject(new Error('No video stream found in file'));
         return;
