@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import axios from 'axios';
 
 const DEFAULT_NOTIFICATION_SERVICE_URL =
-  'https://universearch-notification-service.onrender.com';
+  'https://universearch-notification-service-3zw2.onrender.com';
 
 export interface CreatePostPayload {
   titre: string;

@@ -5,7 +5,7 @@ import axios from 'axios';
 import { randomUUID } from 'crypto';
 
 const DEFAULT_NOTIFICATION_SERVICE_URL =
-  'https://universearch-notification-service.onrender.com';
+  'https://universearch-notification-service-3zw2.onrender.com';
 
 export interface LikeResponse {
   id: string;

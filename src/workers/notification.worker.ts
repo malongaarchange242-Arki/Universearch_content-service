@@ -125,7 +125,7 @@ const notifyFollowers = async (
 
   try {
     const notificationServiceUrl =
-      process.env.NOTIFICATION_SERVICE_URL || 'https://universearch-notification-service.onrender.com';
+      process.env.NOTIFICATION_SERVICE_URL || 'https://universearch-notification-service-3zw2.onrender.com';
     const organizationName = entityInfo?.name || entityInfo?.sigle || post.author_id;
     const organizationDisplayName =
       entityInfo?.sigle?.trim() || entityInfo?.name?.trim() || organizationName;
