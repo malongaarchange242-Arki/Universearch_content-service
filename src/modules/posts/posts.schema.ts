@@ -25,6 +25,10 @@ export const createPostSchema = {
         enum: ['image', 'video'],
         description: 'Type de media',
       },
+      category: {
+        type: ['string', 'null'],
+        description: 'Catégorie du post (ex: général, admission, information, événement)',
+      },
       media_processing_status: {
         type: ['string', 'null'],
         enum: ['queued', 'processing', 'completed', 'failed'],
@@ -51,6 +55,7 @@ export const createPostSchema = {
             media_url: { type: ['string', 'null'] },
             thumbnail_url: { type: ['string', 'null'] },
             media_type: { type: ['string', 'null'] },
+            category: { type: ['string', 'null'] },
             media_processing_status: { type: ['string', 'null'] },
             media_processing_error: { type: ['string', 'null'] },
             statut: { type: 'string' },

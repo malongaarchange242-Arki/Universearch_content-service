@@ -33,12 +33,14 @@ export const createPost = async (
     const media_url = body.media_url || body.mediaUrl || null;
     const thumbnail_url = body.thumbnail_url || body.thumbnailUrl || null;
     const media_type = body.media_type || body.mediaType || null;
+    const category = body.category || body.categorie || null;
     const media_processing_status = body.media_processing_status || body.mediaProcessingStatus || null;
     const media_processing_error = body.media_processing_error || body.mediaProcessingError || null;
 
     const payload: PostsService.CreatePostPayload = {
       titre: titre,
       description: description,
+      category: category,
       media_url: media_url,
       thumbnail_url: thumbnail_url,
       media_type: media_type,

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS posts (
   author_type TEXT NOT NULL CHECK (author_type IN ('universite', 'centre_formation')),
   titre TEXT NOT NULL,
   description TEXT,
+  category TEXT,
   contenu TEXT,
   media_url TEXT,
   thumbnail_url TEXT,
@@ -96,6 +97,22 @@ CREATE TABLE IF NOT EXISTS post_shares (
 
 CREATE INDEX idx_post_shares_post_id ON post_shares(post_id);
 CREATE INDEX idx_post_shares_user_id ON post_shares(user_id);
+
+-- Table: activities
+CREATE TABLE IF NOT EXISTS activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
+  is_public BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by_id UUID NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_activities_status ON activities(status);
+CREATE INDEX idx_activities_created_by_id ON activities(created_by_id);
+CREATE INDEX idx_activities_created_at ON activities(created_at DESC);
 
 -- Enable RLS (Row Level Security)
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;

@@ -6,6 +6,7 @@ import supabasePlugin from './plugins/supabase';
 import multipart from '@fastify/multipart';
 import { postsRoutes } from './modules/posts/posts.routes';
 import { interactionsRoutes } from './modules/interactions/interactions.routes';
+import { activitiesRoutes } from './modules/activities/activities.routes';
 import { feedRoutes } from './modules/feed/feed.routes';
 import { statsRoutes } from './modules/stats/stats.routes';
 import feedbacksRoutes from './routes/feedbacks';
@@ -227,6 +228,7 @@ app.post('/internal/queues/video-processing/dlq/retry/:jobId', async (request: F
  */
 app.register(postsRoutes);
 app.register(interactionsRoutes);
+app.register(activitiesRoutes);
 app.register(feedRoutes);
 app.register(statsRoutes);
 app.register(feedbacksRoutes);

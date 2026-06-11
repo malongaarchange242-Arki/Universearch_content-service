@@ -10,6 +10,7 @@ const DEFAULT_NOTIFICATION_SERVICE_URL =
 export interface CreatePostPayload {
   titre: string;
   description?: string | null;
+  category?: string | null;
   // 'contenu' removed: use 'description' field instead
   media_url?: string | null;
   thumbnail_url?: string | null;
@@ -35,6 +36,7 @@ export interface PostResponse {
   author_type: string;
   titre: string;
   description: string | null;
+  category?: string | null;
   contenu: string;
   media_url: string | null;
   thumbnail_url?: string | null;
@@ -444,12 +446,7 @@ export const createPost = async (
     author_type: authorType,
     titre: payload.titre,
     description: payload.description || null,
-    media_url: payload.media_url || null,
-    thumbnail_url: payload.thumbnail_url || null,
-    media_type: payload.media_type || null,
-    media_processing_status: payload.media_processing_status || null,
-    media_processing_error: payload.media_processing_error || null,
-    statut: 'PUBLISHED',
+      category: payload.category || null,
     date_creation: now,
   };
 
