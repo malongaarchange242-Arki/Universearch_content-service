@@ -11,7 +11,7 @@ export interface CreatePostPayload {
   titre: string;
   description?: string | null;
   category?: string | null;
-  hashtags?: string | null;
+  hashtags?: string | string[] | null;
   // 'contenu' removed: use 'description' field instead
   media_url?: string | null;
   thumbnail_url?: string | null;
@@ -24,7 +24,7 @@ export interface UpdatePostPayload {
   titre?: string;
   description?: string | null;
   category?: string | null;
-  hashtags?: string | null;
+  hashtags?: string | string[] | null;
   media_url?: string | null;
   thumbnail_url?: string | null;
   media_type?: 'image' | 'video' | null;
@@ -40,7 +40,7 @@ export interface PostResponse {
   titre: string;
   description: string | null;
   category?: string | null;
-  hashtags?: string | null;
+  hashtags?: string | string[] | null;
   contenu: string;
   media_url: string | null;
   thumbnail_url?: string | null;
@@ -435,6 +435,18 @@ const sendCommentNotification = async (
 /**
  * CrÃƒÂ©er un post
  */
+const normalizeHashtags = (hashtags: string | string[] | null | undefined): string | string[] | null => {
+  if (!hashtags) return null;
+  if (Array.isArray(hashtags)) {
+    const cleaned = hashtags.map((tag) => String(tag).trim()).filter(Boolean);
+    return cleaned.length ? cleaned : null;
+  }
+  const cleanedString = String(hashtags).trim();
+  if (!cleanedString) return null;
+  const parts = cleanedString.split(/\s+/).filter(Boolean);
+  return parts.length ? parts : null;
+};
+
 export const createPost = async (
   supabase: SupabaseClient,
   authorId: string,
@@ -443,6 +455,7 @@ export const createPost = async (
 ): Promise<PostResponse> => {
   const postId = randomUUID();
   const now = new Date().toISOString();
+  const normalizedHashtags = normalizeHashtags(payload.hashtags);
 
   const insertObj: any = {
     id: postId,
@@ -451,7 +464,7 @@ export const createPost = async (
     titre: payload.titre,
     description: payload.description || null,
     category: payload.category || null,
-    hashtags: payload.hashtags ?? null,
+    hashtags: normalizedHashtags,
     media_url: payload.media_url ?? null,
     thumbnail_url: payload.thumbnail_url ?? null,
     media_type: payload.media_type ?? null,
@@ -460,14 +473,28 @@ export const createPost = async (
     date_creation: now,
   };
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('posts')
     .insert(insertObj)
     .select()
     .single();
 
-  if (error) {
-    throw new Error(`Failed to create post: ${error.message}`);
+  if (error && Array.isArray(normalizedHashtags)) {
+    const fallbackInsertObj = { ...insertObj, hashtags: normalizedHashtags.join(' ') };
+    const fallbackResult = await supabase
+      .from('posts')
+      .insert(fallbackInsertObj)
+      .select()
+      .single();
+
+    if (fallbackResult.error) {
+      throw new Error(`Failed to create post: ${fallbackResult.error.message}`);
+    }
+    data = fallbackResult.data;
+  }
+
+  if (!data) {
+    throw new Error(`Failed to create post: ${error?.message || 'Unknown error'}`);
   }
 
   const createdPost = data as PostResponse;
@@ -1036,14 +1063,33 @@ export const updatePost = async (
     ...payload,
   };
 
-  const { data, error } = await supabase
+  if (payload.hashtags !== undefined) {
+    updateData.hashtags = normalizeHashtags(payload.hashtags);
+  }
+
+  let { data, error } = await supabase
     .from('posts')
     .update(updateData)
     .eq('id', postId)
     .select()
     .single();
 
-  if (error) {
+  if (error && Array.isArray(updateData.hashtags)) {
+    const fallbackUpdateData = { ...updateData, hashtags: updateData.hashtags.join(' ') };
+    const fallbackResult = await supabase
+      .from('posts')
+      .update(fallbackUpdateData)
+      .eq('id', postId)
+      .select()
+      .single();
+
+    if (fallbackResult.error) {
+      throw new Error(`Failed to update post: ${fallbackResult.error.message}`);
+    }
+    data = fallbackResult.data;
+  }
+
+  if (error && !data) {
     throw new Error(`Failed to update post: ${error.message}`);
   }
 

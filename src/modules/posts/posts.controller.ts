@@ -34,7 +34,12 @@ export const createPost = async (
     const thumbnail_url = body.thumbnail_url || body.thumbnailUrl || null;
     const media_type = body.media_type || body.mediaType || null;
     const category = body.category || body.categorie || null;
-    const hashtags = body.hashtags || body.hashtag || null;
+    const rawHashtags = body.hashtags || body.hashtag || null;
+    const hashtags = Array.isArray(rawHashtags)
+      ? rawHashtags.filter(Boolean)
+      : typeof rawHashtags === 'string'
+        ? rawHashtags.trim().split(/\s+/).filter(Boolean)
+        : null;
     const media_processing_status = body.media_processing_status || body.mediaProcessingStatus || null;
     const media_processing_error = body.media_processing_error || body.mediaProcessingError || null;
 

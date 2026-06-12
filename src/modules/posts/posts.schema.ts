@@ -30,7 +30,8 @@ export const createPostSchema = {
         description: 'Catégorie du post (ex: général, admission, information, événement)',
       },
       hashtags: {
-        type: ['string', 'null'],
+        type: ['string', 'array', 'null'],
+        items: { type: 'string' },
         description: 'Hashtags associés au post',
       },
       media_processing_status: {
