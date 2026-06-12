@@ -11,6 +11,7 @@ export interface CreatePostPayload {
   titre: string;
   description?: string | null;
   category?: string | null;
+  hashtags?: string | null;
   // 'contenu' removed: use 'description' field instead
   media_url?: string | null;
   thumbnail_url?: string | null;
@@ -22,6 +23,8 @@ export interface CreatePostPayload {
 export interface UpdatePostPayload {
   titre?: string;
   description?: string | null;
+  category?: string | null;
+  hashtags?: string | null;
   media_url?: string | null;
   thumbnail_url?: string | null;
   media_type?: 'image' | 'video' | null;
@@ -37,6 +40,7 @@ export interface PostResponse {
   titre: string;
   description: string | null;
   category?: string | null;
+  hashtags?: string | null;
   contenu: string;
   media_url: string | null;
   thumbnail_url?: string | null;
@@ -447,6 +451,7 @@ export const createPost = async (
     titre: payload.titre,
     description: payload.description || null,
     category: payload.category || null,
+    hashtags: payload.hashtags ?? null,
     media_url: payload.media_url ?? null,
     thumbnail_url: payload.thumbnail_url ?? null,
     media_type: payload.media_type ?? null,

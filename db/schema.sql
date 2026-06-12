@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS posts (
   titre TEXT NOT NULL,
   description TEXT,
   category TEXT,
+  hashtags TEXT,
   contenu TEXT,
   media_url TEXT,
   thumbnail_url TEXT,
@@ -39,6 +40,7 @@ CREATE INDEX idx_posts_statut ON posts(statut);
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_processing_status TEXT;
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_processing_error TEXT;
+ALTER TABLE posts ADD COLUMN IF NOT EXISTS hashtags TEXT;
 
 -- Table: post_likes
 CREATE TABLE IF NOT EXISTS post_likes (

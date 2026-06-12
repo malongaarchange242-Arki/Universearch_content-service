@@ -29,6 +29,10 @@ export const createPostSchema = {
         type: ['string', 'null'],
         description: 'Catégorie du post (ex: général, admission, information, événement)',
       },
+      hashtags: {
+        type: ['string', 'null'],
+        description: 'Hashtags associés au post',
+      },
       media_processing_status: {
         type: ['string', 'null'],
         enum: ['queued', 'processing', 'completed', 'failed'],
@@ -87,6 +91,9 @@ export const updatePostSchema = {
       media_type: {
         type: 'string',
         enum: ['image', 'video'],
+      },
+      hashtags: {
+        type: 'string',
       },
       media_processing_status: {
         type: 'string',
