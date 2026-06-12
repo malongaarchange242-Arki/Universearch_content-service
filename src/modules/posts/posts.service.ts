@@ -446,7 +446,12 @@ export const createPost = async (
     author_type: authorType,
     titre: payload.titre,
     description: payload.description || null,
-      category: payload.category || null,
+    category: payload.category || null,
+    media_url: payload.media_url ?? null,
+    thumbnail_url: payload.thumbnail_url ?? null,
+    media_type: payload.media_type ?? null,
+    media_processing_status: payload.media_processing_status ?? null,
+    media_processing_error: payload.media_processing_error ?? null,
     date_creation: now,
   };
 
