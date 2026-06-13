@@ -13,7 +13,7 @@
     "dev:worker:notification": "ts-node src/workers/notification.worker.ts"
   },
   "dependencies": {
-    "@fastify/cors": "^11.2.0",
+    "@fastify/cors": "^8.5.0",
     "@fastify/multipart": "^7.0.0",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@supabase/supabase-js": "^2.38.4",
