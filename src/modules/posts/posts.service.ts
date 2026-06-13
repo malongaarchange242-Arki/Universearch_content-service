@@ -556,8 +556,10 @@ export const listPosts = async (
   limit = 50,
   filter?: { author_id?: string; author_type?: string }
 ): Promise<PostResponse[]> => {
-  // Build base query
-  let query: any = supabase.from('posts').select('*');
+  // Build base query with only essential fields to avoid large payloads
+  let query: any = supabase
+    .from('posts')
+    .select('id, author_id, author_type, titre, description, category, hashtags, media_url, thumbnail_url, media_type, statut, date_creation');
 
   // If a filter (exact match) is provided, apply it using .match()
   if (filter && Object.keys(filter).length > 0) {
@@ -602,7 +604,7 @@ export const listPostsByEntity = async (
   // Build query to get posts by entity
   const { data, error } = await supabase
     .from('posts')
-    .select('*')
+    .select('id, author_id, author_type, titre, description, category, hashtags, media_url, thumbnail_url, media_type, statut, date_creation')
     .eq('author_id', entityId)
     .eq('author_type', entityType === 'universite' ? 'universite' : 'centre_formation')
     .eq('statut', 'PUBLISHED')

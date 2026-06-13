@@ -1,6 +1,7 @@
 // src/app.ts
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import cors from '@fastify/cors';
 
 import supabasePlugin from './plugins/supabase';
 import multipart from '@fastify/multipart';
@@ -47,7 +48,8 @@ export const app: FastifyInstance = Fastify({
   logger: {
     level: process.env.LOG_LEVEL || 'info',
   },
-  bodyLimit: 50 * 1024 * 1024, // 50 MB
+  bodyLimit: 10 * 1024 * 1024, // 10 MB
+  requestTimeout: 30000,
 });
 
 /**
@@ -58,38 +60,22 @@ app.register(supabasePlugin as any);
 app.register(multipart as any, {
   attachFieldsToBody: true,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB max per file
+    fileSize: 10 * 1024 * 1024, // 10MB max per file
   },
 });
-// Implement a small manual CORS handler for development to avoid plugin version issues.
-const allowedOrigins = [
-  'http://127.0.0.1:5502',
-  'http://localhost:5502',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'https://universearch-frontend.onrender.com', // Production frontend
-  'null', // for file:// protocol
-];
 
-app.addHook('onRequest', (request, reply, done) => {
-  const origin = (request.headers.origin as string) || 'null';
-  if (allowedOrigins.includes(origin)) {
-    reply.header('Access-Control-Allow-Origin', origin);
-    reply.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (origin !== '*') {
-      reply.header('Access-Control-Allow-Credentials', 'true');
-    }
-  }
-  if (request.method === 'OPTIONS') {
-    reply.code(204).send();
-    return;
-  }
-  done();
+app.register(cors, {
+  origin: [
+    'http://127.0.0.1:5502',
+    'http://localhost:5502',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://universearch-frontend.onrender.com',
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 });
-// Enable CORS for local development (adjust origin in production)
-// Note: manual CORS handled above via onRequest hook.
-
 /**
  * Route de santé
  */
@@ -239,6 +225,15 @@ app.decorate('authMiddleware', authMiddleware);
 // Scheduler pour sync périodique des compteurs pending jobs (toutes les 5 minutes)
 setInterval(syncPendingJobCounts, 5 * 60 * 1000);
 console.log('Started periodic sync of pending job counts (every 5 minutes)');
+
+setInterval(() => {
+  const used = process.memoryUsage();
+  console.log({
+    rss: `${Math.round(used.rss / 1024 / 1024)} MB`,
+    heapUsed: `${Math.round(used.heapUsed / 1024 / 1024)} MB`,
+    heapTotal: `${Math.round(used.heapTotal / 1024 / 1024)} MB`,
+  });
+}, 10000);
 
 /**
  * Global error handler

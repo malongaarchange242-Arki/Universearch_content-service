@@ -294,7 +294,11 @@ export const listPosts = async (
     const query = request.query as any;
     const entityId = query?.entity_id;
     const entityType = query?.entity_type;
-    const limit = query?.limit ? parseInt(query.limit, 10) : 100;
+    const requestedLimit = query?.limit ? parseInt(query.limit, 10) : 10;
+    const limit = Math.min(Math.max(requestedLimit || 10, 1), 10);
+    if (requestedLimit > 10) {
+      request.log.warn({ msg: 'Limit clamp applied', requestedLimit, finalLimit: limit });
+    }
 
     // If entity_id and entity_type are provided, filter by entity
     if (entityId && entityType) {
@@ -544,7 +548,11 @@ export const listPostsByEntity = async (
 
     const entityId = query?.entity_id;
     const entityType = query?.entity_type;
-    const limit = query?.limit ? parseInt(query.limit, 10) : 10;
+    const requestedLimit = query?.limit ? parseInt(query.limit, 10) : 10;
+    const limit = Math.min(Math.max(requestedLimit || 10, 1), 10);
+    if (requestedLimit > 10) {
+      request.log.warn({ msg: 'Limit clamp applied for /posts/entity', requestedLimit, finalLimit: limit });
+    }
 
     if (!entityId || !entityType) {
       return reply.status(400).send({
