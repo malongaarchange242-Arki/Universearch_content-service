@@ -8,7 +8,6 @@ export interface FeedPost {
   author_type: string;
   titre: string;
   description: string | null;
-  contenu: string | null;
   media_url: string | null;
   media_type: string | null;
   statut: string;
@@ -36,18 +35,6 @@ const POST_SELECT_FIELDS = `
   author_type,
   titre,
   description,
-  contenu,
-  media_url,
-  media_type,
-  statut,
-  date_creation
-`;
-const POST_SELECT_FIELDS_FALLBACK = `
-  id,
-  author_id,
-  author_type,
-  titre,
-  description,
   media_url,
   media_type,
   statut,
@@ -65,60 +52,18 @@ const clampLimit = (limit: number): number => {
   return value > MAX_LIMIT ? MAX_LIMIT : value;
 };
 
-const countRowsByPostIds = async (
-  supabase: SupabaseClient,
-  table: string,
-  postIds: string[]
-): Promise<Record<string, number>> => {
-  if (!postIds.length) {
-    return {};
-  }
-
-  const { data, error } = await supabase
-    .from(table)
-    .select('post_id, count:id', { count: 'exact' })
-    .in('post_id', postIds);
-
-  if (error) {
-    throw new Error(`Failed to fetch counts from ${table}: ${error.message}`);
-  }
-
-  return (data || []).reduce((acc: Record<string, number>, row: any) => {
-    const postId = String(row.post_id);
-    const count = Number(row.count ?? 0);
-    if (!Number.isNaN(count)) {
-      acc[postId] = count;
-    }
-    return acc;
-  }, {});
-};
-
 const enrichPostsWithCounts = async (
   supabase: SupabaseClient,
   posts: any[]
 ): Promise<FeedPost[]> => {
-  const postIds = posts.map((post) => String(post.id)).filter(Boolean);
-
-  const [likesByPost, commentsByPost, sharesByPost, viewsByPost] = await Promise.all([
-    countRowsByPostIds(supabase, 'post_likes', postIds),
-    countRowsByPostIds(supabase, 'post_comments', postIds),
-    countRowsByPostIds(supabase, 'post_shares', postIds),
-    countRowsByPostIds(supabase, 'post_views', postIds),
-  ]);
-
   return posts.map((post) => ({
     ...post,
-    likes_count: likesByPost[post.id] ?? 0,
-    comments_count: commentsByPost[post.id] ?? 0,
-    shares_count: sharesByPost[post.id] ?? 0,
-    views_count: viewsByPost[post.id] ?? 0,
+    likes_count: 0,
+    comments_count: 0,
+    shares_count: 0,
+    views_count: 0,
   }));
 };
-
-const buildNormalizedPost = (post: any): any => ({
-  ...post,
-  contenu: post.contenu ?? post.description ?? null,
-});
 
 const fetchPosts = async (
   buildBaseQuery: () => any,
@@ -128,24 +73,18 @@ const fetchPosts = async (
 ) => {
   const offset = (page - 1) * limit;
 
-  const executeQuery = async (selectFields: string) => {
-    const query = buildBaseQuery().select(selectFields, { count: 'exact' });
-    const filteredQuery = applyFilters(query);
-    return filteredQuery.order('date_creation', { ascending: false }).range(offset, offset + limit - 1);
-  };
-
-  let response = await executeQuery(POST_SELECT_FIELDS);
-
-  if (response.error && response.error.message?.includes('column posts.contenu does not exist')) {
-    response = await executeQuery(POST_SELECT_FIELDS_FALLBACK);
-  }
+  const query = buildBaseQuery().select(POST_SELECT_FIELDS, { count: 'exact' });
+  const filteredQuery = applyFilters(query);
+  const response = await filteredQuery
+    .order('date_creation', { ascending: false })
+    .range(offset, offset + limit - 1);
 
   if (response.error) {
     throw new Error(`Failed to fetch feed posts: ${response.error.message}`);
   }
 
   return {
-    posts: (response.data || []).map(buildNormalizedPost),
+    posts: response.data || [],
     total: response.count || 0,
   };
 };
