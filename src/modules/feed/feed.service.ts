@@ -1,19 +1,22 @@
 // src/modules/feed/feed.service.ts
 
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface FeedPost {
   id: string;
-  org_id: string;
-  org_type: string;
-  contenu: string;
+  author_id: string;
+  author_type: string;
+  titre: string;
+  description: string | null;
+  contenu: string | null;
   media_url: string | null;
   media_type: string | null;
+  statut: string;
   date_creation: string;
   likes_count: number;
   comments_count: number;
-  shares_count?: number;
-  views_count?: number;
+  shares_count: number;
+  views_count: number;
 }
 
 export interface FeedResponse {
@@ -25,193 +28,219 @@ export interface FeedResponse {
   };
 }
 
-const getMetricsClient = (supabase: SupabaseClient): SupabaseClient =>
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-    : supabase;
+const MAX_LIMIT = 15;
+const DEFAULT_LIMIT = 10;
+const POST_SELECT_FIELDS = `
+  id,
+  author_id,
+  author_type,
+  titre,
+  description,
+  contenu,
+  media_url,
+  media_type,
+  statut,
+  date_creation
+`;
 
-const enrichPostWithCounts = async (
+const clampPage = (page: number): number => {
+  const value = Number(page) || 1;
+  return value < 1 ? 1 : value;
+};
+
+const clampLimit = (limit: number): number => {
+  const value = Number(limit) || DEFAULT_LIMIT;
+  if (value < 1) return DEFAULT_LIMIT;
+  return value > MAX_LIMIT ? MAX_LIMIT : value;
+};
+
+const countRowsByPostIds = async (
   supabase: SupabaseClient,
-  post: any
-): Promise<FeedPost> => {
-  const metricsClient = getMetricsClient(supabase);
+  table: string,
+  postIds: string[]
+): Promise<Record<string, number>> => {
+  if (!postIds.length) {
+    return {};
+  }
 
-  const [
-    { count: likesCount },
-    { count: commentsCount },
-    { count: sharesCount },
-    { count: viewsCount },
-  ] = await Promise.all([
-    metricsClient
-      .from('post_likes')
-      .select('id', { count: 'exact', head: true })
-      .eq('post_id', post.id),
-    metricsClient
-      .from('post_comments')
-      .select('id', { count: 'exact', head: true })
-      .eq('post_id', post.id),
-    metricsClient
-      .from('post_shares')
-      .select('id', { count: 'exact', head: true })
-      .eq('post_id', post.id),
-    metricsClient
-      .from('post_views')
-      .select('id', { count: 'exact', head: true })
-      .eq('post_id', post.id),
+  const { data, error } = await supabase
+    .from(table)
+    .select('post_id, count:id', { count: 'exact' })
+    .in('post_id', postIds);
+
+  if (error) {
+    throw new Error(`Failed to fetch counts from ${table}: ${error.message}`);
+  }
+
+  return (data || []).reduce((acc: Record<string, number>, row: any) => {
+    const postId = String(row.post_id);
+    const count = Number(row.count ?? 0);
+    if (!Number.isNaN(count)) {
+      acc[postId] = count;
+    }
+    return acc;
+  }, {});
+};
+
+const enrichPostsWithCounts = async (
+  supabase: SupabaseClient,
+  posts: any[]
+): Promise<FeedPost[]> => {
+  const postIds = posts.map((post) => String(post.id)).filter(Boolean);
+
+  const [likesByPost, commentsByPost, sharesByPost, viewsByPost] = await Promise.all([
+    countRowsByPostIds(supabase, 'post_likes', postIds),
+    countRowsByPostIds(supabase, 'post_comments', postIds),
+    countRowsByPostIds(supabase, 'post_shares', postIds),
+    countRowsByPostIds(supabase, 'post_views', postIds),
   ]);
 
-  return {
+  return posts.map((post) => ({
     ...post,
-    likes_count: likesCount || 0,
-    comments_count: commentsCount || 0,
-    shares_count: sharesCount || 0,
-    views_count: viewsCount || 0,
+    likes_count: likesByPost[post.id] ?? 0,
+    comments_count: commentsByPost[post.id] ?? 0,
+    shares_count: sharesByPost[post.id] ?? 0,
+    views_count: viewsByPost[post.id] ?? 0,
+  }));
+};
+
+const fetchPosts = async (
+  queryBuilder: any,
+  page: number,
+  limit: number
+) => {
+  const offset = (page - 1) * limit;
+
+  const { data: posts, error, count } = await queryBuilder
+    .order('date_creation', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    throw new Error(`Failed to fetch feed posts: ${error.message}`);
+  }
+
+  return {
+    posts: posts || [],
+    total: count || 0,
   };
 };
 
-/**
- * Récupérer le feed complet (public)
- */
 export const getFeed = async (
   supabase: SupabaseClient,
   page: number = 1,
-  limit: number = 10
+  limit: number = DEFAULT_LIMIT
 ): Promise<FeedResponse> => {
-  const offset = (page - 1) * limit;
+  const safePage = clampPage(page);
+  const safeLimit = clampLimit(limit);
 
-  // Récupérer les posts avec pagination
-  const { data: posts, error: postsError, count } = await supabase
-    .from('posts')
-    .select('*', { count: 'exact' })
-    .order('date_creation', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (postsError || !posts) {
-    throw new Error(`Failed to fetch feed: ${postsError?.message}`);
-  }
-
-  // Enrichir avec les compteurs
-  const enrichedPosts = await Promise.all(
-    posts.map((post) => enrichPostWithCounts(supabase, post))
+  const { posts, total } = await fetchPosts(
+    supabase
+      .from('posts')
+      .select(POST_SELECT_FIELDS, { count: 'exact' })
+      .eq('statut', 'PUBLISHED'),
+    safePage,
+    safeLimit
   );
+
+  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
 
   return {
     data: enrichedPosts,
     pagination: {
-      page,
-      limit,
-      total: count || 0,
+      page: safePage,
+      limit: safeLimit,
+      total,
     },
   };
 };
 
-/**
- * Récupérer le feed des universités
- */
 export const getUniversitesFeed = async (
   supabase: SupabaseClient,
   page: number = 1,
-  limit: number = 10
+  limit: number = DEFAULT_LIMIT
 ): Promise<FeedResponse> => {
-  const offset = (page - 1) * limit;
+  const safePage = clampPage(page);
+  const safeLimit = clampLimit(limit);
 
-  const { data: posts, error: postsError, count } = await supabase
-    .from('posts')
-    .select('*', { count: 'exact' })
-    .eq('author_type', 'universite')
-    .order('date_creation', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (postsError || !posts) {
-    throw new Error(`Failed to fetch universities feed: ${postsError?.message}`);
-  }
-
-  // Enrichir avec les compteurs
-  const enrichedPosts = await Promise.all(
-    posts.map((post) => enrichPostWithCounts(supabase, post))
+  const { posts, total } = await fetchPosts(
+    supabase.from('posts')
+      .select(POST_SELECT_FIELDS, { count: 'exact' })
+      .eq('author_type', 'universite')
+      .eq('statut', 'PUBLISHED'),
+    safePage,
+    safeLimit
   );
+
+  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
 
   return {
     data: enrichedPosts,
     pagination: {
-      page,
-      limit,
-      total: count || 0,
+      page: safePage,
+      limit: safeLimit,
+      total,
     },
   };
 };
 
-/**
- * Récupérer le feed des centres de formation
- */
 export const getCentresFeed = async (
   supabase: SupabaseClient,
   page: number = 1,
-  limit: number = 10
+  limit: number = DEFAULT_LIMIT
 ): Promise<FeedResponse> => {
-  const offset = (page - 1) * limit;
+  const safePage = clampPage(page);
+  const safeLimit = clampLimit(limit);
 
-  const { data: posts, error: postsError, count } = await supabase
-    .from('posts')
-    .select('*', { count: 'exact' })
-    .eq('author_type', 'centre_formation')
-    .order('date_creation', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (postsError || !posts) {
-    throw new Error(`Failed to fetch centers feed: ${postsError?.message}`);
-  }
-
-  // Enrichir avec les compteurs
-  const enrichedPosts = await Promise.all(
-    posts.map((post) => enrichPostWithCounts(supabase, post))
+  const { posts, total } = await fetchPosts(
+    supabase.from('posts')
+      .select(POST_SELECT_FIELDS, { count: 'exact' })
+      .eq('author_type', 'centre_formation')
+      .eq('statut', 'PUBLISHED'),
+    safePage,
+    safeLimit
   );
+
+  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
 
   return {
     data: enrichedPosts,
     pagination: {
-      page,
-      limit,
-      total: count || 0,
+      page: safePage,
+      limit: safeLimit,
+      total,
     },
   };
 };
 
-/**
- * Récupérer le feed d'une organisation spécifique (université ou centre)
- */
 export const getOrganizationFeed = async (
   supabase: SupabaseClient,
   organizationId: string,
   organizationType: 'universite' | 'centre_formation',
   page: number = 1,
-  limit: number = 10
+  limit: number = DEFAULT_LIMIT
 ): Promise<FeedResponse> => {
-  const offset = (page - 1) * limit;
+  const safePage = clampPage(page);
+  const safeLimit = clampLimit(limit);
 
-  const { data: posts, error: postsError, count } = await supabase
-    .from('posts')
-    .select('*', { count: 'exact' })
-    .eq('author_id', organizationId)
-    .eq('author_type', organizationType)
-    .order('date_creation', { ascending: false })
-    .range(offset, offset + limit - 1);
-
-  if (postsError || !posts) {
-    throw new Error(`Failed to fetch organization feed: ${postsError?.message}`);
-  }
-
-  // Enrichir avec les compteurs
-  const enrichedPosts = await Promise.all(
-    posts.map((post) => enrichPostWithCounts(supabase, post))
+  const { posts, total } = await fetchPosts(
+    supabase
+      .from('posts')
+      .select(POST_SELECT_FIELDS, { count: 'exact' })
+      .eq('author_id', organizationId)
+      .eq('author_type', organizationType)
+      .eq('statut', 'PUBLISHED'),
+    safePage,
+    safeLimit
   );
+
+  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
 
   return {
     data: enrichedPosts,
     pagination: {
-      page,
-      limit,
-      total: count || 0,
+      page: safePage,
+      limit: safeLimit,
+      total,
     },
   };
 };
