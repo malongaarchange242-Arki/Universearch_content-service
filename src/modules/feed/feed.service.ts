@@ -42,6 +42,17 @@ const POST_SELECT_FIELDS = `
   statut,
   date_creation
 `;
+const POST_SELECT_FIELDS_FALLBACK = `
+  id,
+  author_id,
+  author_type,
+  titre,
+  description,
+  media_url,
+  media_type,
+  statut,
+  date_creation
+`;
 
 const clampPage = (page: number): number => {
   const value = Number(page) || 1;
@@ -104,24 +115,37 @@ const enrichPostsWithCounts = async (
   }));
 };
 
+const buildNormalizedPost = (post: any): any => ({
+  ...post,
+  contenu: post.contenu ?? post.description ?? null,
+});
+
 const fetchPosts = async (
-  queryBuilder: any,
+  buildBaseQuery: () => any,
+  applyFilters: (query: any) => any,
   page: number,
   limit: number
 ) => {
   const offset = (page - 1) * limit;
 
-  const { data: posts, error, count } = await queryBuilder
-    .order('date_creation', { ascending: false })
-    .range(offset, offset + limit - 1);
+  const executeQuery = async (selectFields: string) => {
+    const query = applyFilters(buildBaseQuery()).select(selectFields, { count: 'exact' });
+    return query.order('date_creation', { ascending: false }).range(offset, offset + limit - 1);
+  };
 
-  if (error) {
-    throw new Error(`Failed to fetch feed posts: ${error.message}`);
+  let response = await executeQuery(POST_SELECT_FIELDS);
+
+  if (response.error && response.error.message?.includes('column posts.contenu does not exist')) {
+    response = await executeQuery(POST_SELECT_FIELDS_FALLBACK);
+  }
+
+  if (response.error) {
+    throw new Error(`Failed to fetch feed posts: ${response.error.message}`);
   }
 
   return {
-    posts: posts || [],
-    total: count || 0,
+    posts: (response.data || []).map(buildNormalizedPost),
+    total: response.count || 0,
   };
 };
 
@@ -134,10 +158,8 @@ export const getFeed = async (
   const safeLimit = clampLimit(limit);
 
   const { posts, total } = await fetchPosts(
-    supabase
-      .from('posts')
-      .select(POST_SELECT_FIELDS, { count: 'exact' })
-      .eq('statut', 'PUBLISHED'),
+    () => supabase.from('posts'),
+    (query) => query.eq('statut', 'PUBLISHED'),
     safePage,
     safeLimit
   );
@@ -163,10 +185,8 @@ export const getUniversitesFeed = async (
   const safeLimit = clampLimit(limit);
 
   const { posts, total } = await fetchPosts(
-    supabase.from('posts')
-      .select(POST_SELECT_FIELDS, { count: 'exact' })
-      .eq('author_type', 'universite')
-      .eq('statut', 'PUBLISHED'),
+    () => supabase.from('posts'),
+    (query) => query.eq('author_type', 'universite').eq('statut', 'PUBLISHED'),
     safePage,
     safeLimit
   );
@@ -192,10 +212,8 @@ export const getCentresFeed = async (
   const safeLimit = clampLimit(limit);
 
   const { posts, total } = await fetchPosts(
-    supabase.from('posts')
-      .select(POST_SELECT_FIELDS, { count: 'exact' })
-      .eq('author_type', 'centre_formation')
-      .eq('statut', 'PUBLISHED'),
+    () => supabase.from('posts'),
+    (query) => query.eq('author_type', 'centre_formation').eq('statut', 'PUBLISHED'),
     safePage,
     safeLimit
   );
@@ -223,12 +241,12 @@ export const getOrganizationFeed = async (
   const safeLimit = clampLimit(limit);
 
   const { posts, total } = await fetchPosts(
-    supabase
-      .from('posts')
-      .select(POST_SELECT_FIELDS, { count: 'exact' })
-      .eq('author_id', organizationId)
-      .eq('author_type', organizationType)
-      .eq('statut', 'PUBLISHED'),
+    () => supabase.from('posts'),
+    (query) =>
+      query
+        .eq('author_id', organizationId)
+        .eq('author_type', organizationType)
+        .eq('statut', 'PUBLISHED'),
     safePage,
     safeLimit
   );
