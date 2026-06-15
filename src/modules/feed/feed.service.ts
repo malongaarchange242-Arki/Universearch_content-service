@@ -129,8 +129,9 @@ const fetchPosts = async (
   const offset = (page - 1) * limit;
 
   const executeQuery = async (selectFields: string) => {
-    const query = applyFilters(buildBaseQuery()).select(selectFields, { count: 'exact' });
-    return query.order('date_creation', { ascending: false }).range(offset, offset + limit - 1);
+    const query = buildBaseQuery().select(selectFields, { count: 'exact' });
+    const filteredQuery = applyFilters(query);
+    return filteredQuery.order('date_creation', { ascending: false }).range(offset, offset + limit - 1);
   };
 
   let response = await executeQuery(POST_SELECT_FIELDS);
