@@ -54,11 +54,8 @@ const clampLimit = (limit: number): number => {
   return value > MAX_LIMIT ? MAX_LIMIT : value;
 };
 
-const enrichPostsWithCounts = async (
-  _supabase: SupabaseClient,
-  posts: any[]
-): Promise<FeedPost[]> => {
-  return posts.map((post: any) => ({
+const normalizePosts = (posts: any[]): FeedPost[] => {
+  return (posts || []).map((post: any) => ({
     id: String(post.id),
     author_id: String(post.author_id),
     author_type: String(post.author_type),
@@ -75,6 +72,16 @@ const enrichPostsWithCounts = async (
   }));
 };
 
+const buildFeedResponse = (
+  posts: FeedPost[],
+  page: number,
+  limit: number,
+  total: number
+): FeedResponse => ({
+  data: posts,
+  pagination: { page, limit, total },
+});
+
 const fetchPosts = async (
   buildBaseQuery: () => any,
   applyFilters: (query: any) => any,
@@ -83,7 +90,9 @@ const fetchPosts = async (
 ) => {
   const offset = (page - 1) * limit;
 
-  const query = buildBaseQuery().select(POST_SELECT_FIELDS, { count: 'exact' });
+  // Use 'planned' counting to avoid expensive exact COUNT scans on large tables.
+  // If you prefer no count at all, replace with `.select(POST_SELECT_FIELDS)`.
+  const query = buildBaseQuery().select(POST_SELECT_FIELDS, { count: 'planned' });
   const filteredQuery = applyFilters(query);
 
   const response = await filteredQuery.order('date_creation', { ascending: false }).range(offset, offset + limit - 1);
@@ -113,16 +122,8 @@ export const getFeed = async (
     safeLimit
   );
 
-  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
-
-  return {
-    data: enrichedPosts,
-    pagination: {
-      page: safePage,
-      limit: safeLimit,
-      total,
-    },
-  };
+  const normalizedPosts = normalizePosts(posts);
+  return buildFeedResponse(normalizedPosts, safePage, safeLimit, total);
 };
 
 export const getUniversitesFeed = async (
@@ -140,16 +141,8 @@ export const getUniversitesFeed = async (
     safeLimit
   );
 
-  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
-
-  return {
-    data: enrichedPosts,
-    pagination: {
-      page: safePage,
-      limit: safeLimit,
-      total,
-    },
-  };
+  const normalizedPosts = normalizePosts(posts);
+  return buildFeedResponse(normalizedPosts, safePage, safeLimit, total);
 };
 
 export const getCentresFeed = async (
@@ -167,16 +160,8 @@ export const getCentresFeed = async (
     safeLimit
   );
 
-  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
-
-  return {
-    data: enrichedPosts,
-    pagination: {
-      page: safePage,
-      limit: safeLimit,
-      total,
-    },
-  };
+  const normalizedPosts = normalizePosts(posts);
+  return buildFeedResponse(normalizedPosts, safePage, safeLimit, total);
 };
 
 export const getOrganizationFeed = async (
@@ -196,14 +181,6 @@ export const getOrganizationFeed = async (
     safeLimit
   );
 
-  const enrichedPosts = await enrichPostsWithCounts(supabase, posts);
-
-  return {
-    data: enrichedPosts,
-    pagination: {
-      page: safePage,
-      limit: safeLimit,
-      total,
-    },
-  };
+  const normalizedPosts = normalizePosts(posts);
+  return buildFeedResponse(normalizedPosts, safePage, safeLimit, total);
 };

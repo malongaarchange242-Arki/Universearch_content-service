@@ -113,4 +113,11 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trigger_increment_post_views ON post_views;
 CREATE TRIGGER trigger_increment_post_views AFTER INSERT ON post_views FOR EACH ROW EXECUTE FUNCTION public.increment_post_views();
 
+-- 4) Recommended indexes for query performance
+CREATE INDEX IF NOT EXISTS idx_posts_author_id ON posts(author_id);
+CREATE INDEX IF NOT EXISTS idx_posts_author_type ON posts(author_type);
+CREATE INDEX IF NOT EXISTS idx_posts_date_creation ON posts(date_creation DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_statut ON posts(statut);
+CREATE INDEX IF NOT EXISTS idx_posts_author_feed ON posts(author_id, author_type, statut, date_creation DESC);
+
 COMMIT;
