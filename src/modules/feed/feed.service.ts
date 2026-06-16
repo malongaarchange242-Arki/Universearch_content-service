@@ -90,9 +90,9 @@ const fetchPosts = async (
 ) => {
   const offset = (page - 1) * limit;
 
-  // Use 'planned' counting to avoid expensive exact COUNT scans on large tables.
-  // If you prefer no count at all, replace with `.select(POST_SELECT_FIELDS)`.
-  const query = buildBaseQuery().select(POST_SELECT_FIELDS, { count: 'planned' });
+  // Avoid COUNT on large tables for feed queries — select only fields.
+  // If you later need totals, prefer cursor-based or approximate counts.
+  const query = buildBaseQuery().select(POST_SELECT_FIELDS);
   const filteredQuery = applyFilters(query);
 
   const response = await filteredQuery.order('date_creation', { ascending: false }).range(offset, offset + limit - 1);
@@ -101,9 +101,10 @@ const fetchPosts = async (
     throw new Error(`Failed to fetch feed posts: ${response.error.message}`);
   }
 
+  const data = response.data || [];
   return {
-    posts: response.data || [],
-    total: response.count || 0,
+    posts: data,
+    total: data.length,
   };
 };
 
