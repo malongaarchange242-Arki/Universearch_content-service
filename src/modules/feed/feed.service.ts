@@ -34,6 +34,8 @@ const POST_SELECT_FIELDS = `
   titre,
   description,
   media_type,
+  media_url,
+  thumbnail_url,
   statut,
   date_creation,
   likes_count,
