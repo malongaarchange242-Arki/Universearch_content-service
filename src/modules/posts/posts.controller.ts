@@ -11,6 +11,15 @@ import {
   getVideoProcessingJobStatus,
 } from '../../queues/videoProcessing.queue';
 
+const DEFAULT_POST_LIMIT = 50;
+const MAX_POST_LIMIT = 1000;
+
+const clampPostLimit = (value: unknown): number => {
+  const requested = value ? parseInt(String(value), 10) : DEFAULT_POST_LIMIT;
+  if (!Number.isFinite(requested) || requested < 1) return DEFAULT_POST_LIMIT;
+  return Math.min(requested, MAX_POST_LIMIT);
+};
+
 /**
  * Créer un post
  */
@@ -294,11 +303,7 @@ export const listPosts = async (
     const query = request.query as any;
     const entityId = query?.entity_id;
     const entityType = query?.entity_type;
-    const requestedLimit = query?.limit ? parseInt(query.limit, 10) : 10;
-    const limit = Math.min(Math.max(requestedLimit || 10, 1), 10);
-    if (requestedLimit > 10) {
-      request.log.warn({ msg: 'Limit clamp applied', requestedLimit, finalLimit: limit });
-    }
+    const limit = clampPostLimit(query?.limit);
 
     // If entity_id and entity_type are provided, filter by entity
     if (entityId && entityType) {
@@ -548,11 +553,7 @@ export const listPostsByEntity = async (
 
     const entityId = query?.entity_id;
     const entityType = query?.entity_type;
-    const requestedLimit = query?.limit ? parseInt(query.limit, 10) : 10;
-    const limit = Math.min(Math.max(requestedLimit || 10, 1), 10);
-    if (requestedLimit > 10) {
-      request.log.warn({ msg: 'Limit clamp applied for /posts/entity', requestedLimit, finalLimit: limit });
-    }
+    const limit = clampPostLimit(query?.limit);
 
     if (!entityId || !entityType) {
       return reply.status(400).send({

@@ -25,8 +25,8 @@ export interface FeedResponse {
   };
 }
 
-const MAX_LIMIT = 15;
-const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 1000;
+const DEFAULT_LIMIT = 50;
 const POST_SELECT_FIELDS = `
   id,
   author_id,
