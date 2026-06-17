@@ -605,7 +605,7 @@ export const listPostsByEntity = async (
   // Build query to get posts by entity
   const { data, error } = await supabase
     .from('posts')
-    .select('id, author_id, author_type, titre, description, category, hashtags, media_url, thumbnail_url, media_type, statut, date_creation')
+    .select('id, author_id, author_type, titre, description, category, hashtags, thumbnail_url, media_type, statut, date_creation')
     .eq('author_id', entityId)
     .eq('author_type', entityType === 'universite' ? 'universite' : 'centre_formation')
     .eq('statut', 'PUBLISHED')
