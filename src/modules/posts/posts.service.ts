@@ -595,6 +595,7 @@ export const listPosts = async (
 /**
  * Lister les posts par entitÃƒÂ© (universitÃƒÂ© ou centre)
  */
+
 export const listPostsByEntity = async (
   supabase: SupabaseClient,
   entityId: string,
