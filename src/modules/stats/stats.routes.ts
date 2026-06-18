@@ -16,4 +16,14 @@ export const statsRoutes = async (
     '/stats/organization/views-total',
     StatsController.getOrganizationViewsTotal as any
   );
+
+  /**
+   * GET /stats/organization/top-followers
+   * Query params optionnels: organization_id, organization_type
+   * Sinon le contexte est résolu via le Bearer token.
+   */
+  app.get(
+    '/stats/organization/top-followers',
+    StatsController.getOrganizationTopFollowers as any
+  );
 };

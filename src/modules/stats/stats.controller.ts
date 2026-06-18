@@ -69,3 +69,57 @@ export const getOrganizationViewsTotal = async (
     });
   }
 };
+
+export const getOrganizationTopFollowers = async (
+  request: FastifyRequest<{ Querystring: { organization_id?: string; organization_type?: string } }>,
+  reply: FastifyReply
+): Promise<void> => {
+  try {
+    const supabase = (request.server as any).supabaseAdmin;
+    const queryOrgId = String(request.query.organization_id || '').trim();
+    const queryOrgType = normalizeOrganizationType(request.query.organization_type);
+
+    let organizationId = queryOrgId;
+    let organizationType = queryOrgType;
+
+    if (!organizationId || !organizationType) {
+      const viewer = await resolveAuthenticatedUser(request);
+
+      if (!viewer) {
+        return reply.status(400).send({
+          success: false,
+          error:
+            'Missing organization_id/organization_type query parameters or Authorization header',
+        });
+      }
+
+      organizationId = organizationId || viewer.id;
+      organizationType =
+        organizationType || normalizeOrganizationType(viewer.role) || null;
+    }
+
+    if (!organizationId || !organizationType) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Unable to resolve organization context',
+      });
+    }
+
+    const followers = await StatsService.getOrganizationTopFollowers(
+      supabase,
+      organizationId,
+      organizationType
+    );
+
+    reply.send({
+      success: true,
+      data: followers,
+    });
+  } catch (error) {
+    request.log.error(error);
+    reply.status(500).send({
+      success: false,
+      error: (error as Error).message,
+    });
+  }
+};
