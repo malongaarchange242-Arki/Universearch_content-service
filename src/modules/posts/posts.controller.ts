@@ -466,14 +466,18 @@ export const createSignedUrl = async (
 // --- new handlers below ---
 
 export const createComment = async (
-  request: FastifyRequest<{ Params: { id: string }; Body: { contenu: string; parent_comment_id?: string } }>,
+  request: FastifyRequest<{ Params: { id: string }; Body: { contenu?: string; commentaire?: string; content?: string; parent_comment_id?: string } }>,
   reply: FastifyReply
 ): Promise<void> => {
   try {
     const user = (request.user as any);
     // 🔥 Use service role client to bypass RLS (backend is trusted)
     const supabase = (request.server as any).supabaseAdmin;
-    const contenu = (request.body as any)?.contenu || '';
+    const contenu =
+      (request.body as any)?.contenu ||
+      (request.body as any)?.commentaire ||
+      (request.body as any)?.content ||
+      '';
     const parentCommentId = (request.body as any)?.parent_comment_id || null;
 
     if (!contenu || typeof contenu !== 'string') {

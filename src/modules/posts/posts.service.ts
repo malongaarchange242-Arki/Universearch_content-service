@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import axios from 'axios';
 
 const DEFAULT_NOTIFICATION_SERVICE_URL =
-  'https://universearch-notification-service-3zw2.onrender.com';
+  'https://universearch-notification-service.onrender.com';
 
 export interface CreatePostPayload {
   titre: string;
@@ -75,6 +75,15 @@ interface CommentNotificationTarget {
   title: string;
   message: string;
 }
+
+const normalizeCommentUserType = (type?: string | null): string => {
+  const normalized = type?.toString().trim().toLowerCase() || '';
+  if (normalized.includes('univers')) return 'universite';
+  if (normalized.includes('centre')) return 'centre_formation';
+  if (normalized === 'university') return 'universite';
+  if (normalized === 'center') return 'centre_formation';
+  return normalized || 'user';
+};
 
 const isInstitutionAuthorType = (
   entityType: string
@@ -650,6 +659,7 @@ export const createComment = async (
     post_id: postId,
     user_id: userId,
     contenu: contenu,
+    commentaire: contenu,
     date_comment: now,
   };
 
@@ -664,15 +674,22 @@ export const createComment = async (
     .single();
 
   if (error) {
-    // If parent_comment_id column doesn't exist, try without it
-    if (parentCommentId && error.message.includes('parent_comment_id')) {
-      const fallbackObj = {
+    // If parent_comment_id/commentaire columns don't exist, try a compatible insert.
+    if (
+      error.message.includes('parent_comment_id') ||
+      error.message.includes('commentaire')
+    ) {
+      const fallbackObj: any = {
         id: commentId,
         post_id: postId,
         user_id: userId,
         contenu: contenu,
         date_comment: now,
       };
+
+      if (parentCommentId && !error.message.includes('parent_comment_id')) {
+        fallbackObj.parent_comment_id = parentCommentId;
+      }
 
       const { data: fallbackData, error: fallbackError } = await supabase
         .from('post_comments')
@@ -684,7 +701,11 @@ export const createComment = async (
         throw new Error(`Failed to create comment: ${fallbackError.message}`);
       }
 
-      return { ...fallbackData, parent_comment_id: null };
+      return {
+        ...fallbackData,
+        commentaire: fallbackData?.commentaire ?? fallbackData?.contenu,
+        parent_comment_id: fallbackData?.parent_comment_id ?? null,
+      };
     }
     throw new Error(`Failed to create comment: ${error.message}`);
   }
@@ -742,11 +763,7 @@ export const createComment = async (
             'Failed to fetch parent comment for notification:',
             parentCommentError.message
           );
-        } else if (
-          parentComment?.user_id &&
-          parentComment.user_id !== userId &&
-          parentComment.user_id !== postInfo.author_id
-        ) {
+        } else if (parentComment?.user_id && parentComment.user_id !== userId) {
           targets.push({
             userId: parentComment.user_id,
             type: 'comment_reply',
@@ -756,8 +773,15 @@ export const createComment = async (
         }
       }
 
+      const uniqueTargets = targets.filter(
+        (target, index, list) =>
+          list.findIndex(
+            (item) => item.userId === target.userId && item.type === target.type
+          ) === index
+      );
+
       await Promise.all(
-        targets.map((target) =>
+        uniqueTargets.map((target) =>
           sendCommentNotification(target, {
             actorUserId: userId,
             actorRole,
@@ -781,7 +805,11 @@ export const createComment = async (
     }
   })();
 
-  return data;
+  return {
+    ...data,
+    commentaire: data.commentaire ?? data.contenu,
+    parent_comment_id: data.parent_comment_id ?? parentCommentId ?? null,
+  };
 };
 
 /**
@@ -910,16 +938,14 @@ export const listViewerScopedComments = async (
   );
   const enrichedReplies = await enrichCommentsWithUsers(supabase, replyRows);
 
-  const organizationReplies = enrichedReplies.filter(
+  const repliesToViewerComments = enrichedReplies.filter(
     (comment: any) =>
       comment.parent_comment_id &&
       ownCommentIds.includes(comment.parent_comment_id) &&
-      ['university', 'center', 'centre', 'centre_formation'].includes(
-        comment.user?.type
-      )
+      comment.user_id !== viewerUserId
   );
 
-  const merged = [...enrichedOwnComments, ...organizationReplies].sort(
+  const merged = [...enrichedOwnComments, ...repliesToViewerComments].sort(
     (a: any, b: any) =>
       new Date(a.date_comment || a.created_at || 0).getTime() -
       new Date(b.date_comment || b.created_at || 0).getTime()
@@ -941,13 +967,13 @@ const enrichCommentsWithUsers = async (supabase: SupabaseClient, comments: any[]
   const userIds = comments.map(c => c.user_id);
   const { data: universities, error: uniError } = await supabase
     .from('universites')
-    .select('id, nom, sigle')
-    .in('id', userIds);
+    .select('id, profile_id, nom, sigle')
+    .or(`id.in.(${userIds.join(',')}),profile_id.in.(${userIds.join(',')})`);
 
   const { data: centers, error: centerError } = await supabase
     .from('centres_formation')
-    .select('id, nom, sigle')
-    .in('id', userIds);
+    .select('id, profile_id, nom, sigle')
+    .or(`id.in.(${userIds.join(',')}),profile_id.in.(${userIds.join(',')})`);
 
   const { data: profiles, error: profileError } = await supabase
     .from('profiles')
@@ -969,11 +995,15 @@ const enrichCommentsWithUsers = async (supabase: SupabaseClient, comments: any[]
   const userMap = new Map<string, { name: string; sigle?: string; type: string }>();
 
   (universities || []).forEach(u => {
-    userMap.set(u.id, { name: u.nom, sigle: u.sigle, type: 'university' });
+    const info = { name: u.nom, sigle: u.sigle, type: 'universite' };
+    userMap.set(u.id, info);
+    if (u.profile_id) userMap.set(u.profile_id, info);
   });
 
   (centers || []).forEach(c => {
-    userMap.set(c.id, { name: c.nom, sigle: c.sigle, type: 'center' });
+    const info = { name: c.nom, sigle: c.sigle, type: 'centre_formation' };
+    userMap.set(c.id, info);
+    if (c.profile_id) userMap.set(c.profile_id, info);
   });
 
   (profiles || []).forEach((profile: any) => {
@@ -988,7 +1018,7 @@ const enrichCommentsWithUsers = async (supabase: SupabaseClient, comments: any[]
 
     userMap.set(profile.id, {
       name: fullName || profile.nom || profile.email || 'Utilisateur',
-      type: profile.profile_type === 'utilisateur' ? 'user' : profile.profile_type || 'user',
+      type: normalizeCommentUserType(profile.profile_type),
     });
   });
 
