@@ -12,6 +12,11 @@ export const createActivitySchema = {
         enum: ['active', 'completed', 'archived'],
       },
       is_public: { type: 'boolean' },
+      organization_id: { type: 'string' },
+      organization_type: {
+        type: 'string',
+        enum: ['universite', 'centre', 'centre_formation'],
+      },
     },
     additionalProperties: false,
   },
@@ -47,6 +52,11 @@ export const updateActivitySchema = {
         enum: ['active', 'completed', 'archived'],
       },
       is_public: { type: 'boolean' },
+      organization_id: { type: 'string' },
+      organization_type: {
+        type: 'string',
+        enum: ['universite', 'centre', 'centre_formation'],
+      },
     },
     additionalProperties: false,
   },

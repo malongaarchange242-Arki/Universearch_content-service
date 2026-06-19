@@ -7,6 +7,8 @@ export interface CreateActivityPayload {
   description?: string | null;
   status?: 'active' | 'completed' | 'archived';
   is_public?: boolean;
+  organization_id?: string | null;
+  organization_type?: 'universite' | 'centre' | 'centre_formation' | null;
 }
 
 export interface UpdateActivityPayload {
@@ -14,6 +16,8 @@ export interface UpdateActivityPayload {
   description?: string | null;
   status?: 'active' | 'completed' | 'archived';
   is_public?: boolean;
+  organization_id?: string | null;
+  organization_type?: 'universite' | 'centre' | 'centre_formation' | null;
 }
 
 export interface ActivityRecord {
@@ -23,9 +27,27 @@ export interface ActivityRecord {
   status: 'active' | 'completed' | 'archived';
   is_public: boolean;
   created_by_id: string;
+  organization_id: string | null;
+  organization_type: 'universite' | 'centre_formation' | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface ListActivitiesOptions {
+  currentUserId?: string | null;
+  organizationId?: string | null;
+  organizationType?: 'universite' | 'centre' | 'centre_formation' | null;
+}
+
+const normalizeOrganizationType = (
+  value: CreateActivityPayload['organization_type']
+): 'universite' | 'centre_formation' | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes('univers')) return 'universite';
+  if (normalized.includes('centre')) return 'centre_formation';
+  return null;
+};
 
 export const createActivity = async (
   supabase: SupabaseClient,
@@ -33,10 +55,12 @@ export const createActivity = async (
   createdById: string
 ): Promise<ActivityRecord> => {
   const insertPayload = {
-    ...payload,
+    title: payload.title,
     description: payload.description ?? null,
     is_public: payload.is_public ?? true,
     status: payload.status ?? 'active',
+    organization_id: payload.organization_id ?? null,
+    organization_type: normalizeOrganizationType(payload.organization_type),
     created_by_id: createdById,
     updated_at: new Date().toISOString(),
   };
@@ -56,9 +80,24 @@ export const createActivity = async (
 
 export const listActivities = async (
   supabase: SupabaseClient,
-  currentUserId?: string | null
+  options: ListActivitiesOptions = {}
 ): Promise<ActivityRecord[]> => {
+  const currentUserId = options.currentUserId ?? null;
+  const organizationId = options.organizationId ?? null;
+  const organizationType = normalizeOrganizationType(options.organizationType);
   let query = supabase.from('activities').select('*');
+
+  if (organizationId) {
+    const orgFilters = [`organization_id.eq.${organizationId}`];
+    if (currentUserId) {
+      orgFilters.push(`created_by_id.eq.${currentUserId}`);
+    }
+    query = query.or(orgFilters.join(','));
+  }
+
+  if (organizationType) {
+    query = query.or(`organization_type.eq.${organizationType},organization_type.is.null`);
+  }
 
   if (currentUserId) {
     query = query.or(`is_public.eq.true,created_by_id.eq.${currentUserId}`);
@@ -100,6 +139,10 @@ export const updateActivity = async (
 ): Promise<ActivityRecord> => {
   const updatePayload = {
     ...payload,
+    organization_type:
+      payload.organization_type === undefined
+        ? undefined
+        : normalizeOrganizationType(payload.organization_type),
     updated_at: new Date().toISOString(),
   };
 

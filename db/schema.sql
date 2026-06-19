@@ -108,12 +108,15 @@ CREATE TABLE IF NOT EXISTS activities (
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'archived')),
   is_public BOOLEAN NOT NULL DEFAULT TRUE,
   created_by_id UUID NOT NULL,
+  organization_id UUID,
+  organization_type TEXT CHECK (organization_type IN ('universite', 'centre_formation')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX idx_activities_status ON activities(status);
 CREATE INDEX idx_activities_created_by_id ON activities(created_by_id);
+CREATE INDEX idx_activities_organization ON activities(organization_id, organization_type);
 CREATE INDEX idx_activities_created_at ON activities(created_at DESC);
 
 -- Enable RLS (Row Level Security)

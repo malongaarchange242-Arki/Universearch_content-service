@@ -2,9 +2,20 @@
 
 import { FastifyReply, FastifyRequest } from 'fastify';
 import * as ActivitiesService from './activities.service';
+import { resolveAuthenticatedUser } from '../../middleware/authenticate';
 
 const getSupabase = (request: FastifyRequest) =>
   (request.server as any).supabaseAdmin;
+
+const normalizeOrganizationType = (
+  value: string | null | undefined
+): 'universite' | 'centre_formation' | null => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized.includes('univers')) return 'universite';
+  if (normalized.includes('centre')) return 'centre_formation';
+  return null;
+};
 
 export const createActivity = async (
   request: FastifyRequest,
@@ -26,13 +37,20 @@ export const createActivity = async (
 };
 
 export const listActivities = async (
-  request: FastifyRequest,
+  request: FastifyRequest<{ Querystring: { organization_id?: string; organization_type?: string } }>,
   reply: FastifyReply
 ): Promise<void> => {
-  const currentUserId = request.user?.id ?? null;
+  const user = request.user ?? (await resolveAuthenticatedUser(request));
+  const currentUserId = user?.id ?? null;
+  const organizationId = String(request.query.organization_id || '').trim() || null;
+  const organizationType = normalizeOrganizationType(request.query.organization_type);
   const activities = await ActivitiesService.listActivities(
     getSupabase(request),
-    currentUserId
+    {
+      currentUserId,
+      organizationId,
+      organizationType,
+    }
   );
   reply.send({ success: true, data: activities });
 };
