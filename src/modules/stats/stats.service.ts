@@ -15,8 +15,14 @@ export interface TopFollowerInteraction {
   likes: number;
   comments: number;
   views: number;
+  shares: number;
   score: number;
   last_interaction_at: string | null;
+}
+
+interface ResolvedOrganizationIds {
+  entityId: string;
+  authorIds: string[];
 }
 
 export const getOrganizationViewsTotal = async (
@@ -71,25 +77,63 @@ const normalizeOrganizationType = (
 };
 
 const getRowTimestamp = (row: any): string | null => {
-  return (
-    row.date_comment ||
-    row.date_view ||
-    row.created_at ||
-    row.date_created ||
-    null
-  );
+  return row.created_at || null;
+};
+
+const resolveOrganizationIds = async (
+  supabase: SupabaseClient,
+  organizationId: string,
+  organizationType: 'universite' | 'centre_formation',
+  contentAuthorId?: string | null
+): Promise<ResolvedOrganizationIds> => {
+  const tableName = organizationType === 'universite' ? 'universites' : 'centres_formation';
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .select('id, profile_id')
+    .or(`id.eq.${organizationId},profile_id.eq.${organizationId}`);
+
+  if (error) {
+    throw new Error(`Failed to resolve organization ids: ${error.message}`);
+  }
+
+  const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
+  const entityId = row?.id || organizationId;
+  const authorIds = [
+    contentAuthorId,
+    row?.profile_id,
+    row?.id,
+    organizationId,
+  ].filter((value, index, list): value is string => Boolean(value) && list.indexOf(value) === index);
+
+  return { entityId, authorIds };
 };
 
 export const getOrganizationTopFollowers = async (
   supabase: SupabaseClient,
   organizationId: string,
   organizationType: 'universite' | 'centre_formation',
-  limit = 10
+  limit = 10,
+  contentAuthorId?: string | null
 ): Promise<TopFollowerInteraction[]> => {
+  const resolved = await resolveOrganizationIds(
+    supabase,
+    organizationId,
+    organizationType,
+    contentAuthorId
+  );
+
+  console.log('[TopFollowersService] resolved organization', {
+    organizationId,
+    organizationType,
+    entityId: resolved.entityId,
+    authorIds: resolved.authorIds,
+  });
+
   const { data: posts, error: postsError } = await supabase
     .from('posts')
     .select('id')
-    .eq('author_id', organizationId)
+    .in('author_id', resolved.authorIds)
     .eq('author_type', organizationType);
 
   if (postsError) {
@@ -111,7 +155,7 @@ export const getOrganizationTopFollowers = async (
   const { data: followersData, error: followersError } = await supabase
     .from(followerTable)
     .select('user_id')
-    .eq(followerColumn, organizationId);
+    .eq(followerColumn, resolved.entityId);
 
   if (followersError) {
     throw new Error(`Failed to fetch followers: ${followersError.message}`);
@@ -122,7 +166,7 @@ export const getOrganizationTopFollowers = async (
     return [];
   }
 
-  const [likesResult, commentsResult, viewsResult] = await Promise.all([
+  const [likesResult, commentsResult, viewsResult, sharesResult] = await Promise.all([
     supabase
       .from('post_likes')
       .select('user_id, created_at')
@@ -130,29 +174,48 @@ export const getOrganizationTopFollowers = async (
       .in('user_id', followerIds),
     supabase
       .from('post_comments')
-      .select('user_id, date_comment, created_at')
+      .select('user_id, created_at')
       .in('post_id', postIds)
       .in('user_id', followerIds),
     supabase
       .from('post_views')
-      .select('user_id, date_view, created_at')
+      .select('user_id, created_at')
+      .in('post_id', postIds)
+      .in('user_id', followerIds),
+    supabase
+      .from('post_shares')
+      .select('user_id, created_at')
       .in('post_id', postIds)
       .in('user_id', followerIds),
   ]);
 
+  console.log('[DEBUG] Interaction results counts', {
+    likes: likesResult.data?.length || 0,
+    comments: commentsResult.data?.length || 0,
+    views: viewsResult.data?.length || 0,
+    shares: sharesResult.data?.length || 0,
+  });
+
   if (likesResult.error) {
+    console.error('[ERROR likes query]', likesResult.error);
     throw new Error(`Failed to fetch post likes: ${likesResult.error.message}`);
   }
   if (commentsResult.error) {
+    console.error('[ERROR comments query]', commentsResult);
     throw new Error(`Failed to fetch post comments: ${commentsResult.error.message}`);
   }
   if (viewsResult.error) {
+    console.error('[ERROR views query]', viewsResult.error);
     throw new Error(`Failed to fetch post views: ${viewsResult.error.message}`);
+  }
+  if (sharesResult.error) {
+    console.error('[ERROR shares query]', sharesResult.error);
+    throw new Error(`Failed to fetch post shares: ${sharesResult.error.message}`);
   }
 
   const interactionMap = new Map<string, TopFollowerInteraction>();
 
-  const addInteraction = (row: any, type: 'likes' | 'comments' | 'views') => {
+  const addInteraction = (row: any, type: 'likes' | 'comments' | 'views' | 'shares') => {
     if (!row?.user_id) return;
     const userId = row.user_id;
     if (!followerIds.includes(userId)) return;
@@ -163,6 +226,7 @@ export const getOrganizationTopFollowers = async (
       likes: 0,
       comments: 0,
       views: 0,
+      shares: 0,
       score: 0,
       last_interaction_at: null,
     };
@@ -170,8 +234,9 @@ export const getOrganizationTopFollowers = async (
     if (type === 'likes') existing.likes += 1;
     if (type === 'comments') existing.comments += 1;
     if (type === 'views') existing.views += 1;
+    if (type === 'shares') existing.shares += 1;
 
-    existing.score = existing.comments * 5 + existing.likes * 3 + existing.views * 1;
+    existing.score = existing.comments * 5 + existing.shares * 4 + existing.likes * 3 + existing.views * 1;
 
     const timestamp = getRowTimestamp(row);
     if (timestamp) {
@@ -186,6 +251,7 @@ export const getOrganizationTopFollowers = async (
   (likesResult.data || []).forEach((row: any) => addInteraction(row, 'likes'));
   (commentsResult.data || []).forEach((row: any) => addInteraction(row, 'comments'));
   (viewsResult.data || []).forEach((row: any) => addInteraction(row, 'views'));
+  (sharesResult.data || []).forEach((row: any) => addInteraction(row, 'shares'));
 
   if (interactionMap.size === 0) {
     return [];

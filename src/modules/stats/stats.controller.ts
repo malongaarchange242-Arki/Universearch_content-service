@@ -79,6 +79,12 @@ export const getOrganizationTopFollowers = async (
     const queryOrgId = String(request.query.organization_id || '').trim();
     const queryOrgType = normalizeOrganizationType(request.query.organization_type);
 
+    request.log.info({
+      event: 'TopFollowersRequest',
+      queryOrgId,
+      queryOrgType,
+    });
+
     let organizationId = queryOrgId;
     let organizationType = queryOrgType;
 
@@ -110,6 +116,13 @@ export const getOrganizationTopFollowers = async (
       organizationId,
       organizationType
     );
+
+    request.log.info({
+      event: 'TopFollowersResult',
+      organizationId,
+      organizationType,
+      count: followers.length,
+    });
 
     reply.send({
       success: true,
