@@ -4,7 +4,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import * as ActivitiesService from './activities.service';
 
 const getSupabase = (request: FastifyRequest) =>
-  (request.server as any).supabase;
+  (request.server as any).supabaseAdmin;
 
 export const createActivity = async (
   request: FastifyRequest,
