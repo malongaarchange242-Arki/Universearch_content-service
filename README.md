@@ -54,5 +54,9 @@ src/
 
 ## Variables d'environnement
 
+- `POST_VIEW_COOLDOWN_MS` — cooldown for post views in milliseconds
+- `PROFILE_VIEW_COOLDOWN_MS` — cooldown for profile views in milliseconds
+- `AD_VIEW_COOLDOWN_MS` — cooldown for ad views in milliseconds
+
 Voir `.env.example`
 "# Universearch_content-service" 

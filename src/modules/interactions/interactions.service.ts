@@ -49,11 +49,37 @@ interface PostViewRow {
 
 const notificationServiceUrl =
   process.env.NOTIFICATION_SERVICE_URL || DEFAULT_NOTIFICATION_SERVICE_URL;
+
 const parsedPostViewCooldownMs = Number(process.env.POST_VIEW_COOLDOWN_MS);
+const parsedProfileViewCooldownMs = Number(process.env.PROFILE_VIEW_COOLDOWN_MS);
+const parsedAdViewCooldownMs = Number(process.env.AD_VIEW_COOLDOWN_MS);
+
 const POST_VIEW_COOLDOWN_MS =
   Number.isFinite(parsedPostViewCooldownMs) && parsedPostViewCooldownMs > 0
     ? parsedPostViewCooldownMs
     : 60_000;
+const PROFILE_VIEW_COOLDOWN_MS =
+  Number.isFinite(parsedProfileViewCooldownMs) && parsedProfileViewCooldownMs > 0
+    ? parsedProfileViewCooldownMs
+    : 60_000;
+const AD_VIEW_COOLDOWN_MS =
+  Number.isFinite(parsedAdViewCooldownMs) && parsedAdViewCooldownMs > 0
+    ? parsedAdViewCooldownMs
+    : 60_000;
+
+export type ViewCooldownType = 'post' | 'profile' | 'ad';
+
+export const getViewCooldownMs = (type: ViewCooldownType): number => {
+  switch (type) {
+    case 'profile':
+      return PROFILE_VIEW_COOLDOWN_MS;
+    case 'ad':
+      return AD_VIEW_COOLDOWN_MS;
+    case 'post':
+    default:
+      return POST_VIEW_COOLDOWN_MS;
+  }
+};
 
 const mapPostViewResponse = (
   row: any,
@@ -108,10 +134,14 @@ const getLatestPostView = async (
   return data ? mapPostViewResponse(data, fallbackDate, fallbackDuration) : null;
 };
 
-const isWithinViewCooldown = (dateView: string, nowMs: number): boolean => {
+const isWithinViewCooldown = (
+  dateView: string,
+  nowMs: number,
+  cooldownMs: number
+): boolean => {
   const viewedAtMs = Date.parse(dateView);
   if (!Number.isFinite(viewedAtMs)) return false;
-  return nowMs - viewedAtMs < POST_VIEW_COOLDOWN_MS;
+  return nowMs - viewedAtMs < cooldownMs;
 };
 
 const resolveViewerProfileId = async (
@@ -488,7 +518,10 @@ export const recordPostView = async (
       normalizedDuration
     );
 
-    if (latestView && isWithinViewCooldown(latestView.date_view, nowMs)) {
+    if (
+      latestView &&
+      isWithinViewCooldown(latestView.date_view, nowMs, getViewCooldownMs('post'))
+    ) {
       return latestView;
     }
   }
@@ -541,7 +574,10 @@ export const recordPostView = async (
       normalizedDuration
     );
 
-    if (latestView && isWithinViewCooldown(latestView.date_view, nowMs)) {
+    if (
+      latestView &&
+      isWithinViewCooldown(latestView.date_view, nowMs, getViewCooldownMs('post'))
+    ) {
       return latestView;
     }
 
